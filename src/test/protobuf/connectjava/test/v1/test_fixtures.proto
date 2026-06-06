@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+package connectjava.test.v1;
+
+option java_multiple_files = true;
+option java_package = "io.suboptimal.connectjava.testfixtures";
+
+service UnaryGetFixtureService {
+  rpc SafeUnary(UnaryGetRequest) returns (UnaryGetResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  rpc MutatingUnary(UnaryGetRequest) returns (UnaryGetResponse);
+}
+
+service UnaryPostFixtureService {
+  rpc Unary(UnaryPostRequest) returns (UnaryPostResponse);
+}
+
+message UnaryPostRequest {
+  string text = 1;
+}
+
+message UnaryPostResponse {
+  string text = 1;
+}
+
+message UnaryGetRequest {
+  string text = 1;
+  bytes blob = 2;
+}
+
+message UnaryGetResponse {
+  string text = 1;
+}
+
+service StreamingFixtureService {
+  rpc ServerStreaming(StreamingRequest) returns (stream StreamingResponse);
+  rpc ClientStreaming(stream StreamingRequest) returns (StreamingResponse);
+}
+
+message StreamingRequest {
+  string text = 1;
+}
+
+message StreamingResponse {
+  string text = 1;
+}
