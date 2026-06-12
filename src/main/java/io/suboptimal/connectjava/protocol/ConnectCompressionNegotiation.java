@@ -5,6 +5,7 @@ import io.netty.buffer.ByteBufAllocator;
 import io.suboptimal.connectjava.compression.ConnectCompression;
 import io.suboptimal.connectjava.compression.ConnectCompressionRegistry;
 import io.suboptimal.connectjava.compression.ConnectIdentityCompression;
+import org.jetbrains.annotations.ApiStatus;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
@@ -12,12 +13,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-final class ConnectCompressionNegotiation {
+@ApiStatus.Internal
+public final class ConnectCompressionNegotiation {
 
     private ConnectCompressionNegotiation() {
     }
 
-    static @Nullable String compressionNameFor(@Nullable CharSequence encoding) {
+    public static @Nullable String compressionNameFor(@Nullable CharSequence encoding) {
         if (encoding == null) {
             return null;
         }
@@ -25,11 +27,11 @@ final class ConnectCompressionNegotiation {
         return name.isEmpty() ? null : name;
     }
 
-    static String formatSupportedEncodings(ConnectCompressionRegistry registry) {
+    public static String formatSupportedEncodings(ConnectCompressionRegistry registry) {
         return String.join(",", registry.supportedNames());
     }
 
-    static ConnectCompression selectResponseEncoding(
+    public static ConnectCompression selectResponseEncoding(
         ConnectCompression requestEncoding, @Nullable String responseEncoding, ConnectCompressionRegistry registry)
     {
         if (!requestEncoding.isIdentity()) {
@@ -100,7 +102,7 @@ final class ConnectCompressionNegotiation {
         return null;
     }
 
-    static ByteBuf decompressMessage(ByteBufAllocator alloc, ByteBuf body, ConnectCompression compression)
+    public static ByteBuf decompressMessage(ByteBufAllocator alloc, ByteBuf body, ConnectCompression compression)
         throws IOException
     {
         if (body.readableBytes() == 0) {
