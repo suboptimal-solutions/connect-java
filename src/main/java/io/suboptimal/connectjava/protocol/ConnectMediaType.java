@@ -2,15 +2,17 @@ package io.suboptimal.connectjava.protocol;
 
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpUtil;
+import org.jetbrains.annotations.ApiStatus;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Locale;
 
-final class ConnectMediaType {
+@ApiStatus.Internal
+public final class ConnectMediaType {
 
     private ConnectMediaType() {}
 
-    static @Nullable String codecNameFor(HttpRequest request) {
+    public static @Nullable String codecNameFor(HttpRequest request) {
         CharSequence mimeTypeRaw = HttpUtil.getMimeType(request);
         String mimeType = mimeTypeRaw == null ? "" : mimeTypeRaw.toString();
 
@@ -21,7 +23,7 @@ final class ConnectMediaType {
         };
     }
 
-    static String unaryContentTypeFor(String codecName) {
+    public static String unaryContentTypeFor(String codecName) {
         return switch (codecName) {
             case "proto" -> "application/proto";
             case "json" -> "application/json";
@@ -29,7 +31,7 @@ final class ConnectMediaType {
         };
     }
 
-    static String streamingContentTypeFor(String codecName) {
+    public static String streamingContentTypeFor(String codecName) {
         return switch (codecName) {
             case "proto" -> "application/connect+proto";
             case "json" -> "application/connect+json";

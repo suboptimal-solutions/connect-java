@@ -100,7 +100,10 @@ import io.netty.handler.codec.http.HttpServerCodec;
 
 import io.suboptimal.connectjava.codec.protobuf.ConnectProtobufCodecs;
 import io.suboptimal.connectjava.model.*;
-import io.suboptimal.connectjava.protocol.*;
+import io.suboptimal.connectjava.protocol.server.ConnectCorsParameters;
+import io.suboptimal.connectjava.protocol.server.ConnectServerProtocol;
+import io.suboptimal.connectjava.protocol.server.ConnectServerProtocolConfig;
+import io.suboptimal.connectjava.protocol.server.ConnectServerProtocolParameters;
 
 import java.util.Map;
 
@@ -115,18 +118,18 @@ ConnectServiceDefinition greeter = new ConnectServiceDefinition(
             /* idempotent — also reachable via Unary-GET */ true)),
     /* optional descriptor for introspection */ null);
 
-ConnectProtocolConfig config = ConnectProtocolConfig
+ConnectServerProtocolConfig config = ConnectServerProtocolConfig
     .builder(
         Map.of(greeter.serviceName(), greeter),
         GreeterCallHandler::new,                       // ConnectCallHandlerFactory
-        new ConnectProtocolParameters(
+        new ConnectServerProtocolParameters(
             /* maxRequestBytes */ 4 * 1024 * 1024,
             /* maxFrameBytes   */ 1 * 1024 * 1024,
             ConnectCorsParameters.disabled()),
         ConnectProtobufCodecs.defaults())              // proto + proto-json codecs
     .build();
 
-ConnectProtocol protocol = new ConnectProtocol(config);
+ConnectServerProtocol protocol = new ConnectServerProtocol(config);
 
 ChannelInitializer<Channel> http1Initializer = new ChannelInitializer<>() {
     @Override
@@ -347,13 +350,13 @@ serves Connect alongside any other HTTP/1.1 or HTTP/2 protocol you implement,
 with ALPN, H2C prior-knowledge, and H2C upgrade negotiation done for you:
 
 ```java
-import io.suboptimal.connectjava.protocol.ConnectProtocol;
+import io.suboptimal.connectjava.protocol.server.ConnectServerProtocol;
 import io.suboptimal.nettymultiprotocol.AppChannelConfigurer;
 import io.suboptimal.nettymultiprotocol.AppProtocol;
 import io.suboptimal.nettymultiprotocol.AppProtocolRegistry;
 import io.suboptimal.nettymultiprotocol.NettyMultiprotocol;
 
-ConnectProtocol connect = new ConnectProtocol(connectConfig);
+io.suboptimal.connectjava.protocol.server.ConnectServerProtocol connect = new ConnectServerProtocol(connectConfig);
 
 AppProtocol connectAsApp = new AppProtocol() {
     @Override public AppChannelConfigurer http1() { return connect.http1()::configure; }

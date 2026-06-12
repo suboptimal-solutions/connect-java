@@ -2,6 +2,7 @@ package io.suboptimal.connectjava.protocol;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
+import org.jetbrains.annotations.ApiStatus;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -9,22 +10,23 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Encoding is stateless; decoding is stateful (maintains a buffer accumulator).
  */
-final class ConnectEnvelope {
-    static final byte FLAG_COMPRESSED = 0x01;
-    static final byte FLAG_END_STREAM = 0x02;
+@ApiStatus.Internal
+public final class ConnectEnvelope {
+    public static final byte FLAG_COMPRESSED = 0x01;
+    public static final byte FLAG_END_STREAM = 0x02;
     static final int HEADER_SIZE = 5;
 
     private ConnectEnvelope() {}
 
-    record DecodedFrame(byte flags, ByteBuf payload) {}
+    public record DecodedFrame(byte flags, ByteBuf payload) {}
 
-    static final class FrameTooLargeException extends RuntimeException {
+    public static final class FrameTooLargeException extends RuntimeException {
         FrameTooLargeException(String message) {
             super(message, null, false, false);
         }
     }
 
-    static ByteBuf encode(ByteBufAllocator alloc, byte flags, byte[] payload) {
+    public static ByteBuf encode(ByteBufAllocator alloc, byte flags, byte[] payload) {
         ByteBuf buf = alloc.buffer(HEADER_SIZE + payload.length);
         buf.writeByte(flags);
         buf.writeInt(payload.length);
@@ -32,7 +34,7 @@ final class ConnectEnvelope {
         return buf;
     }
 
-    static ByteBuf encode(ByteBufAllocator alloc, byte flags, ByteBuf payload) {
+    public static ByteBuf encode(ByteBufAllocator alloc, byte flags, ByteBuf payload) {
         ByteBuf buf = alloc.buffer(HEADER_SIZE + payload.readableBytes());
         buf.writeByte(flags);
         buf.writeInt(payload.readableBytes());
@@ -40,12 +42,12 @@ final class ConnectEnvelope {
         return buf;
     }
 
-    static final class Decoder {
+    public static final class Decoder {
         private final ByteBuf accumulator;
         private final int maxFrameBytes;
         private boolean closed;
 
-        Decoder(ByteBufAllocator alloc, int maxFrameBytes) {
+        public Decoder(ByteBufAllocator alloc, int maxFrameBytes) {
             this.accumulator = alloc.buffer();
             this.maxFrameBytes = maxFrameBytes;
         }
@@ -54,7 +56,7 @@ final class ConnectEnvelope {
          * Appends incoming bytes to the internal accumulator. No-op if the decoder is closed
          * or {@code buf} has no readable bytes.
          */
-        void append(ByteBuf buf) {
+        public void append(ByteBuf buf) {
             if (closed) {
                 return;
             }
@@ -70,7 +72,8 @@ final class ConnectEnvelope {
          * the declared payload length exceeds the configured maximum. Returns {@code null} if
          * the decoder is closed.
          */
-        @Nullable DecodedFrame pollFrame() {
+        @Nullable
+        public DecodedFrame pollFrame() {
             if (closed) {
                 return null;
             }
@@ -94,11 +97,11 @@ final class ConnectEnvelope {
             return new DecodedFrame(flags, payload);
         }
 
-        int readableBytes() {
+        public int readableBytes() {
             return closed ? 0 : accumulator.readableBytes();
         }
 
-        void close() {
+        public void close() {
             if (!closed) {
                 closed = true;
                 accumulator.release();

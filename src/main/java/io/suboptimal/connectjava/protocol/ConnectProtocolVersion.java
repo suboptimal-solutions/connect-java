@@ -1,17 +1,19 @@
 package io.suboptimal.connectjava.protocol;
 
 import io.netty.handler.codec.http.HttpHeaders;
+import org.jetbrains.annotations.ApiStatus;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 
-final class ConnectProtocolVersion {
+@ApiStatus.Internal
+public final class ConnectProtocolVersion {
     public static final String HEADER_VERSION = "1";
     public static final String QUERY_VERSION = "v1";
 
     private ConnectProtocolVersion() {}
 
-    static @Nullable String validate(HttpHeaders headers) {
+    public static @Nullable String validate(HttpHeaders headers) {
         String connectVersion = headers.get("connect-protocol-version");
         if (connectVersion == null || HEADER_VERSION.equals(connectVersion)) {
             return null;
@@ -19,7 +21,7 @@ final class ConnectProtocolVersion {
         return formatError(connectVersion);
     }
 
-    static @Nullable String validate(@Nullable List<String> queryParams) {
+    public static @Nullable String validate(@Nullable List<String> queryParams) {
         if (queryParams == null || queryParams.isEmpty()) {
             return null;
         }
