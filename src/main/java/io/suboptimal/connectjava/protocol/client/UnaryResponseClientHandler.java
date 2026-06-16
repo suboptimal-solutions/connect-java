@@ -40,12 +40,12 @@ class UnaryResponseClientHandler extends SimpleChannelInboundHandler<FullHttpRes
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, FullHttpResponse response) {
         int statusCode = response.status().code();
-        ConnectResponseMeta meta = buildMeta(statusCode, response);
+        MetaContainer meta = buildMeta(statusCode, response);
 
-        observer.onResponseHeaders(meta);
+        observer.onResponseHeaders(meta.connectResponseMeta());
 
         ConnectClientResponseStart responseStart =
-                new ConnectClientResponseStart(callStart.serviceDefinition(), callStart.methodDefinition(), meta);
+                new ConnectClientResponseStart(callStart.serviceDefinition(), callStart.methodDefinition(), meta.connectResponseMeta);
 
         ctx.fireChannelRead(responseStart);
 
@@ -106,7 +106,7 @@ class UnaryResponseClientHandler extends SimpleChannelInboundHandler<FullHttpRes
         closed = true;
         observer.onResponsePayload(decoded);
         ctx.fireChannelRead(new ConnectPayload(decoded));
-        ctx.fireChannelRead(ConnectEndOfStream.INSTANCE);
+        ctx.fireChannelRead(new ConnectEndOfStream(meta.trailers()));
         observer.onCallComplete(null);
     }
 
@@ -166,7 +166,7 @@ class UnaryResponseClientHandler extends SimpleChannelInboundHandler<FullHttpRes
         return c != null ? c : ConnectIdentityCompression.INSTANCE;
     }
 
-    private static ConnectResponseMeta buildMeta(int statusCode, FullHttpResponse response) {
+    private static MetaContainer buildMeta(int statusCode, FullHttpResponse response) {
         Map<String, List<String>> all = new LinkedHashMap<>();
         all.putAll(ClientHandlerSupport.toHeaderMap(response.headers()));
         all.putAll(ClientHandlerSupport.toHeaderMap(response.trailingHeaders()));
@@ -181,6 +181,9 @@ class UnaryResponseClientHandler extends SimpleChannelInboundHandler<FullHttpRes
                 headers.put(name, entry.getValue());
             }
         }
-        return new ConnectResponseMeta(statusCode, headers, trailers);
+
+        return new MetaContainer(new ConnectResponseMeta(statusCode, headers), trailers);
     }
+
+    private record MetaContainer(ConnectResponseMeta connectResponseMeta, Map<String, List<String>> trailers) { }
 }

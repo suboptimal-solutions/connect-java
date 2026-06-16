@@ -79,7 +79,7 @@ class UnaryResponseClientHandlerTest {
         assertThat(((ConnectPayload) payload).data()).isEqualTo(RESPONSE);
 
         Object endOfStream = channel.readInbound();
-        assertThat(endOfStream).isSameAs(ConnectEndOfStream.INSTANCE);
+        assertThat(endOfStream).isEqualTo(ConnectEndOfStream.INSTANCE);
 
         assertThat(observer.events)
             .containsExactly("onResponseHeaders", "onResponsePayload", "onCallComplete");
@@ -270,7 +270,6 @@ class UnaryResponseClientHandlerTest {
         ConnectClientResponseStart start = channel.readInbound();
         ConnectResponseMeta meta = start.responseMeta();
 
-        assertThat(meta.trailers().get("x-foo")).containsExactly("bar");
         assertThat(meta.headers()).containsKey("x-plain");
         assertThat(meta.headers()).doesNotContainKey("x-foo");
 

@@ -25,7 +25,7 @@ class ConnectClientInterceptorPipelineTest {
     private static final ConnectClientCallStart CALL_START = new ConnectClientCallStart(
         SERVICE, METHOD, Map.of(), false, "proto");
     private static final ConnectResponseMeta META =
-        new ConnectResponseMeta(200, Map.of(), Map.of());
+        new ConnectResponseMeta(200, Map.of());
 
     @Test
     void emptyPipelineContinues() {

@@ -239,7 +239,7 @@ class StreamingClientHandler extends ChannelDuplexHandler {
         }
 
         Map<String, List<String>> headersMap = ClientHandlerSupport.toHeaderMap(response.headers());
-        ConnectResponseMeta responseMeta = new ConnectResponseMeta(statusCode, headersMap, Map.of());
+        ConnectResponseMeta responseMeta = new ConnectResponseMeta(statusCode, headersMap);
         decoder = new ConnectEnvelope.Decoder(ctx.alloc(), config.parameters().maxFrameBytes());
         observer.onResponseHeaders(responseMeta);
         ctx.fireChannelRead(new ConnectClientResponseStart(
