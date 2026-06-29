@@ -20,23 +20,7 @@ public final class ConnectStringBuilderJsonDeserializer implements ConnectJsonDe
     private ConnectStringBuilderJsonDeserializer() {}
 
     @Override
-    public @Nullable ConnectError parseError(byte[] body) {
-        String json = new String(body, StandardCharsets.UTF_8);
-        String code = extractJsonString(json, "code");
-        if (code == null) {
-            return null;
-        }
-        ConnectErrorCode errorCode = findErrorCode(code);
-        if (errorCode == null) {
-            errorCode = ConnectErrorCode.UNKNOWN;
-        }
-        String message = extractJsonString(json, "message");
-        List<ConnectErrorDetail> details = parseDetails(json);
-        return new ConnectError(errorCode, message != null ? message : "", details);
-    }
-
-    @Override
-    public @Nullable ConnectError parseEndStreamError(byte[] body) {
+    public @Nullable ConnectError parseStreamError(byte[] body) {
         String json = new String(body, StandardCharsets.UTF_8);
         int errorIdx = json.indexOf("\"error\"");
         if (errorIdx < 0) {
@@ -67,13 +51,13 @@ public final class ConnectStringBuilderJsonDeserializer implements ConnectJsonDe
     }
 
     @Override
-    public Map<String, List<String>> parseEndStreamMetadata(byte[] body) {
+    public Map<String, List<String>> parseStreamMetadata(byte[] body) {
         String json = new String(body, StandardCharsets.UTF_8);
         return parseMetadata(json);
     }
 
     @Override
-    public @Nullable ConnectErrorBody parseErrorBody(byte[] body) {
+    public @Nullable ConnectErrorBody parseUnaryError(byte[] body) {
         String json = new String(body, StandardCharsets.UTF_8);
         if (!json.contains("\"code\"") && !json.contains("\"message\"")
                 && !json.contains("\"details\"")) {

@@ -1,5 +1,7 @@
 package io.suboptimal.connectjava.protocol.client;
 
+import io.suboptimal.connectjava.api.ConnectClientCallStart;
+import io.suboptimal.connectjava.api.ConnectClientCallStartBuilder;
 import io.suboptimal.connectjava.api.ConnectError;
 import io.suboptimal.connectjava.api.ConnectResponseMeta;
 import io.suboptimal.connectjava.model.ConnectMethodDefinition;
@@ -13,7 +15,6 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -27,60 +28,64 @@ class ConnectClientInterceptorPipelineTest {
     private static final ConnectResponseMeta META =
         new ConnectResponseMeta(200, Map.of());
 
+    private ConnectClientCallStartBuilder newBuilder() {
+        return new ConnectClientCallStartBuilder(CALL_START);
+    }
+
     @Test
     void emptyPipelineContinues() {
-        ConnectClientInterceptor.Decision d = ConnectClientInterceptorPipeline.EMPTY.interceptCall(CALL_START);
+        ConnectClientCallStartBuilder builder = newBuilder();
+        ConnectClientInterceptor.Decision d = ConnectClientInterceptorPipeline.EMPTY.interceptCall(builder);
 
         assertThat(d).isInstanceOf(ConnectClientInterceptor.Decision.Continue.class);
         assertThat(d.observer()).isSameAs(ConnectClientCallObserver.NOOP);
-        assertThat(((ConnectClientInterceptor.Decision.Continue) d).callStart()).isSameAs(CALL_START);
     }
 
     @Test
     void allNoOpObserversProduceNoOp() {
         ConnectClientInterceptorPipeline pipeline = new ConnectClientInterceptorPipeline(List.of(
-            cs -> ConnectClientInterceptor.continueCall(),
-            cs -> ConnectClientInterceptor.continueCall()
+            b -> ConnectClientInterceptor.continueCall(),
+            b -> ConnectClientInterceptor.continueCall()
         ));
 
-        assertThat(pipeline.interceptCall(CALL_START).observer()).isSameAs(ConnectClientCallObserver.NOOP);
+        assertThat(pipeline.interceptCall(newBuilder()).observer()).isSameAs(ConnectClientCallObserver.NOOP);
     }
 
     @Test
     void singleNonNoOpObserverIsReturnedDirectly() {
         ClientTestSupport.RecordingObserver observer = new ClientTestSupport.RecordingObserver();
         ConnectClientInterceptorPipeline pipeline = new ConnectClientInterceptorPipeline(List.of(
-            cs -> ConnectClientInterceptor.continueWith(observer)
+            b -> ConnectClientInterceptor.continueWith(observer)
         ));
 
-        assertThat(pipeline.interceptCall(CALL_START).observer()).isSameAs(observer);
+        assertThat(pipeline.interceptCall(newBuilder()).observer()).isSameAs(observer);
     }
 
     @Test
     void noOpObserversAreFilteredFromComposite() {
         ClientTestSupport.RecordingObserver real = new ClientTestSupport.RecordingObserver();
         ConnectClientInterceptorPipeline pipeline = new ConnectClientInterceptorPipeline(List.of(
-            cs -> ConnectClientInterceptor.continueCall(),
-            cs -> ConnectClientInterceptor.continueWith(real),
-            cs -> ConnectClientInterceptor.continueCall()
+            b -> ConnectClientInterceptor.continueCall(),
+            b -> ConnectClientInterceptor.continueWith(real),
+            b -> ConnectClientInterceptor.continueCall()
         ));
 
-        assertThat(pipeline.interceptCall(CALL_START).observer()).isSameAs(real);
+        assertThat(pipeline.interceptCall(newBuilder()).observer()).isSameAs(real);
     }
 
     @Test
     void requestPayloadCallbacksAreFIFO() {
         List<String> log = new ArrayList<>();
         ConnectClientInterceptorPipeline pipeline = new ConnectClientInterceptorPipeline(List.of(
-            cs -> ConnectClientInterceptor.continueWith(new ConnectClientCallObserver() {
+            b -> ConnectClientInterceptor.continueWith(new ConnectClientCallObserver() {
                 @Override public void onRequestPayload(Object p) { log.add("first"); }
             }),
-            cs -> ConnectClientInterceptor.continueWith(new ConnectClientCallObserver() {
+            b -> ConnectClientInterceptor.continueWith(new ConnectClientCallObserver() {
                 @Override public void onRequestPayload(Object p) { log.add("second"); }
             })
         ));
 
-        ConnectClientCallObserver composite = pipeline.interceptCall(CALL_START).observer();
+        ConnectClientCallObserver composite = pipeline.interceptCall(newBuilder()).observer();
         composite.onRequestPayload("x");
 
         assertThat(log).containsExactly("first", "second");
@@ -90,15 +95,15 @@ class ConnectClientInterceptorPipelineTest {
     void requestFinishedCallbacksAreFIFO() {
         List<String> log = new ArrayList<>();
         ConnectClientInterceptorPipeline pipeline = new ConnectClientInterceptorPipeline(List.of(
-            cs -> ConnectClientInterceptor.continueWith(new ConnectClientCallObserver() {
+            b -> ConnectClientInterceptor.continueWith(new ConnectClientCallObserver() {
                 @Override public void onRequestFinished() { log.add("first"); }
             }),
-            cs -> ConnectClientInterceptor.continueWith(new ConnectClientCallObserver() {
+            b -> ConnectClientInterceptor.continueWith(new ConnectClientCallObserver() {
                 @Override public void onRequestFinished() { log.add("second"); }
             })
         ));
 
-        ConnectClientCallObserver composite = pipeline.interceptCall(CALL_START).observer();
+        ConnectClientCallObserver composite = pipeline.interceptCall(newBuilder()).observer();
         composite.onRequestFinished();
 
         assertThat(log).containsExactly("first", "second");
@@ -108,15 +113,15 @@ class ConnectClientInterceptorPipelineTest {
     void responsePayloadCallbacksAreFIFO() {
         List<String> log = new ArrayList<>();
         ConnectClientInterceptorPipeline pipeline = new ConnectClientInterceptorPipeline(List.of(
-            cs -> ConnectClientInterceptor.continueWith(new ConnectClientCallObserver() {
+            b -> ConnectClientInterceptor.continueWith(new ConnectClientCallObserver() {
                 @Override public void onResponsePayload(Object p) { log.add("first"); }
             }),
-            cs -> ConnectClientInterceptor.continueWith(new ConnectClientCallObserver() {
+            b -> ConnectClientInterceptor.continueWith(new ConnectClientCallObserver() {
                 @Override public void onResponsePayload(Object p) { log.add("second"); }
             })
         ));
 
-        ConnectClientCallObserver composite = pipeline.interceptCall(CALL_START).observer();
+        ConnectClientCallObserver composite = pipeline.interceptCall(newBuilder()).observer();
         composite.onResponsePayload("x");
 
         assertThat(log).containsExactly("first", "second");
@@ -126,15 +131,15 @@ class ConnectClientInterceptorPipelineTest {
     void responseHeaderCallbacksAreLIFO() {
         List<String> log = new ArrayList<>();
         ConnectClientInterceptorPipeline pipeline = new ConnectClientInterceptorPipeline(List.of(
-            cs -> ConnectClientInterceptor.continueWith(new ConnectClientCallObserver() {
+            b -> ConnectClientInterceptor.continueWith(new ConnectClientCallObserver() {
                 @Override public void onResponseHeaders(ConnectResponseMeta m) { log.add("first"); }
             }),
-            cs -> ConnectClientInterceptor.continueWith(new ConnectClientCallObserver() {
+            b -> ConnectClientInterceptor.continueWith(new ConnectClientCallObserver() {
                 @Override public void onResponseHeaders(ConnectResponseMeta m) { log.add("second"); }
             })
         ));
 
-        ConnectClientCallObserver composite = pipeline.interceptCall(CALL_START).observer();
+        ConnectClientCallObserver composite = pipeline.interceptCall(newBuilder()).observer();
         composite.onResponseHeaders(META);
 
         assertThat(log).containsExactly("second", "first");
@@ -144,15 +149,15 @@ class ConnectClientInterceptorPipelineTest {
     void callCompleteCallbacksAreLIFO() {
         List<String> log = new ArrayList<>();
         ConnectClientInterceptorPipeline pipeline = new ConnectClientInterceptorPipeline(List.of(
-            cs -> ConnectClientInterceptor.continueWith(new ConnectClientCallObserver() {
+            b -> ConnectClientInterceptor.continueWith(new ConnectClientCallObserver() {
                 @Override public void onCallComplete(ConnectError e) { log.add("first"); }
             }),
-            cs -> ConnectClientInterceptor.continueWith(new ConnectClientCallObserver() {
+            b -> ConnectClientInterceptor.continueWith(new ConnectClientCallObserver() {
                 @Override public void onCallComplete(ConnectError e) { log.add("second"); }
             })
         ));
 
-        ConnectClientCallObserver composite = pipeline.interceptCall(CALL_START).observer();
+        ConnectClientCallObserver composite = pipeline.interceptCall(newBuilder()).observer();
         composite.onCallComplete(null);
 
         assertThat(log).containsExactly("second", "first");
@@ -163,18 +168,18 @@ class ConnectClientInterceptorPipelineTest {
         List<String> callOrder = new ArrayList<>();
         List<String> completedLog = new ArrayList<>();
 
-        ConnectClientInterceptor first = cs -> {
+        ConnectClientInterceptor first = b -> {
             callOrder.add("first");
             return ConnectClientInterceptor.continueWith(new ConnectClientCallObserver() {
                 @Override public void onCallComplete(ConnectError e) { completedLog.add("first"); }
             });
         };
         ConnectError rejectError = ConnectError.permissionDenied("no");
-        ConnectClientInterceptor rejecting = cs -> {
+        ConnectClientInterceptor rejecting = b -> {
             callOrder.add("rejecting");
             return ConnectClientInterceptor.reject(rejectError);
         };
-        ConnectClientInterceptor notReached = cs -> {
+        ConnectClientInterceptor notReached = b -> {
             callOrder.add("notReached");
             return ConnectClientInterceptor.continueCall();
         };
@@ -182,7 +187,7 @@ class ConnectClientInterceptorPipelineTest {
         ConnectClientInterceptorPipeline pipeline = new ConnectClientInterceptorPipeline(
             List.of(first, rejecting, notReached));
 
-        ConnectClientInterceptor.Decision d = pipeline.interceptCall(CALL_START);
+        ConnectClientInterceptor.Decision d = pipeline.interceptCall(newBuilder());
 
         assertThat(d).isInstanceOf(ConnectClientInterceptor.Decision.Reject.class);
         assertThat(((ConnectClientInterceptor.Decision.Reject) d).error()).isSameAs(rejectError);
@@ -195,31 +200,34 @@ class ConnectClientInterceptorPipelineTest {
     @Test
     void rejectionWithNoPriorContinueObserversReturnsNoOp() {
         ConnectClientInterceptorPipeline pipeline = new ConnectClientInterceptorPipeline(List.of(
-            cs -> ConnectClientInterceptor.reject(ConnectError.unauthenticated("go away"))
+            b -> ConnectClientInterceptor.reject(ConnectError.unauthenticated("go away"))
         ));
 
-        ConnectClientInterceptor.Decision d = pipeline.interceptCall(CALL_START);
+        ConnectClientInterceptor.Decision d = pipeline.interceptCall(newBuilder());
 
         assertThat(d).isInstanceOf(ConnectClientInterceptor.Decision.Reject.class);
         assertThat(d.observer()).isSameAs(ConnectClientCallObserver.NOOP);
     }
 
     @Test
-    void rewriteIsThreadedToNextInterceptor() {
-        AtomicReference<ConnectClientCallStart> seenBySecond = new AtomicReference<>();
+    void mutationsAreSharedAcrossInterceptors() {
+        ConnectClientCallStartBuilder builder = newBuilder();
 
-        ConnectClientInterceptor first = cs -> ConnectClientInterceptor.continueWith(cs.withHeader("x-a", "1"));
-        ConnectClientInterceptor second = cs -> {
-            seenBySecond.set(cs);
-            return ConnectClientInterceptor.continueWith(cs.withHeader("x-b", "2"));
+        ConnectClientInterceptor first = b -> {
+            b.addHeader("x-a", "1");
+            return ConnectClientInterceptor.continueCall();
+        };
+        ConnectClientInterceptor second = b -> {
+            // second interceptor sees mutation from first since they share the builder
+            assertThat(b.headerValues("x-a")).containsExactly("1");
+            b.addHeader("x-b", "2");
+            return ConnectClientInterceptor.continueCall();
         };
 
         ConnectClientInterceptorPipeline pipeline = new ConnectClientInterceptorPipeline(List.of(first, second));
-        ConnectClientInterceptor.Decision d = pipeline.interceptCall(CALL_START);
+        pipeline.interceptCall(builder);
 
-        assertThat(seenBySecond.get().requestHeaders()).containsKey("x-a");
-
-        ConnectClientCallStart effective = ((ConnectClientInterceptor.Decision.Continue) d).callStart();
+        ConnectClientCallStart effective = builder.build();
         assertThat(effective.requestHeaders()).containsKey("x-a");
         assertThat(effective.requestHeaders()).containsKey("x-b");
     }

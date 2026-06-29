@@ -6,9 +6,15 @@ import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http.HttpObjectAggregator;
+import io.suboptimal.connectjava.api.ConnectClientCallStart;
+import io.suboptimal.connectjava.api.ConnectClientCallStartBuilder;
+import io.suboptimal.connectjava.api.ConnectEndOfStream;
 import io.suboptimal.connectjava.api.ConnectError;
 import io.suboptimal.connectjava.codec.ConnectCodec;
 import io.suboptimal.connectjava.model.ConnectMethodType;
+
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @ChannelHandler.Sharable
 class ConnectClientCallDispatcher extends ChannelOutboundHandlerAdapter {
@@ -47,19 +53,16 @@ class ConnectClientCallDispatcher extends ChannelOutboundHandlerAdapter {
             pipeline.remove(ConnectClientPipeline.STREAMING_HANDLER);
         }
 
-        ConnectClientInterceptor.Decision decision = interceptorPipeline.interceptCall(callStart);
+        ConnectClientCallStartBuilder builder = new ConnectClientCallStartBuilder(callStart);
+        ConnectClientInterceptor.Decision decision = interceptorPipeline.interceptCall(builder);
         switch (decision) {
             case ConnectClientInterceptor.Decision.Reject(ConnectClientCallObserver observer, var error) -> {
                 observer.onCallComplete(error);
-                ctx.fireChannelRead(error);
+                ctx.fireChannelRead(new ConnectEndOfStream(Map.of(), error));
                 promise.setSuccess();
             }
-            case ConnectClientInterceptor.Decision.Continue(var observer, var rewrittenCallStart) -> {
-                // Interceptors may rewrite the outgoing request; use the effective call start
-                // (falling back to the original when no interceptor rewrote it) everywhere below.
-                ConnectClientCallStart effectiveCallStart = rewrittenCallStart != null
-                        ? rewrittenCallStart
-                        : callStart;
+            case ConnectClientInterceptor.Decision.Continue(var observer) -> {
+                ConnectClientCallStart effectiveCallStart = builder.build();
 
                 // codecName is a plain String (not an enum) because codecs are extensible and are
                 // identified by name on the wire and in the registry. The downside of a String is
@@ -72,7 +75,7 @@ class ConnectClientCallDispatcher extends ChannelOutboundHandlerAdapter {
                     ConnectError error = ConnectError.internal(
                         "Unknown codec '" + codecName + "'; registered: " + registeredCodecNames());
                     observer.onCallComplete(error);
-                    ctx.fireChannelRead(error);
+                    ctx.fireChannelRead(new ConnectEndOfStream(Map.of(), error));
                     promise.setSuccess();
                     return;
                 }
@@ -93,10 +96,17 @@ class ConnectClientCallDispatcher extends ChannelOutboundHandlerAdapter {
                                 new UnaryPostRequestClientHandler(effectiveCallStart, config, observer));
                         }
                     }
-                    case SERVER_STREAMING, CLIENT_STREAMING, BIDI_STREAMING ->
+                    case SERVER_STREAMING, CLIENT_STREAMING ->
                         pipeline.addBefore(ConnectClientPipeline.CALL_DISPATCHER,
                             ConnectClientPipeline.STREAMING_HANDLER,
                             new StreamingClientHandler(effectiveCallStart, config, observer));
+                    case BIDI_STREAMING -> {
+                        promise.setSuccess();
+                        ConnectError error = ConnectError.unimplemented("Bidi streaming not supported on HTTP/1.1");
+                        observer.onCallComplete(error);
+                        ctx.fireChannelRead(new ConnectEndOfStream(Map.of(), error));
+                        return;
+                    }
                 }
                 ctx.write(effectiveCallStart, promise);
             }
@@ -104,13 +114,11 @@ class ConnectClientCallDispatcher extends ChannelOutboundHandlerAdapter {
     }
 
     private String registeredCodecNames() {
-        StringBuilder sb = new StringBuilder();
-        for (ConnectCodec codec : config.codecRegistry().preferred()) {
-            if (!sb.isEmpty()) {
-                sb.append(", ");
-            }
-            sb.append(codec.name());
-        }
-        return sb.toString();
+        return config
+                .codecRegistry()
+                .preferred()
+                .stream()
+                .map(ConnectCodec::name)
+                .collect(Collectors.joining(", "));
     }
 }

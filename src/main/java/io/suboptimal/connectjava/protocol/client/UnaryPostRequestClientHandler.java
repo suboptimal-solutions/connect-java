@@ -1,5 +1,6 @@
 package io.suboptimal.connectjava.protocol.client;
 
+import io.suboptimal.connectjava.api.ConnectClientCallStart;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;

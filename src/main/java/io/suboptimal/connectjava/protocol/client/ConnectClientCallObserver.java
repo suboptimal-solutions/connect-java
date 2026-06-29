@@ -25,6 +25,8 @@ import org.jspecify.annotations.Nullable;
  * cancellation.
  */
 public interface ConnectClientCallObserver {
+    // Outbound request (FIFO)
+
     /**
      * Called for each outbound request payload as it is encoded and sent.
      *
@@ -38,6 +40,8 @@ public interface ConnectClientCallObserver {
      * <p>Invoked in interceptor registration order (FIFO).
      */
     default void onRequestFinished() {}
+
+    // Inbound response (LIFO; payload is FIFO)
 
     /**
      * Called once when the response headers arrive, before any response payload is delivered.

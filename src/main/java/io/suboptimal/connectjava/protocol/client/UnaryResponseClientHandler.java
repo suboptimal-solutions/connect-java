@@ -5,12 +5,14 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpHeaderNames;
+import io.suboptimal.connectjava.api.ConnectClientCallStart;
 import io.suboptimal.connectjava.api.ConnectClientResponseStart;
 import io.suboptimal.connectjava.api.ConnectResponseMeta;
 import io.suboptimal.connectjava.api.ConnectEndOfStream;
 import io.suboptimal.connectjava.api.ConnectError;
 import io.suboptimal.connectjava.api.ConnectErrorCode;
 import io.suboptimal.connectjava.api.ConnectErrorDetail;
+import io.suboptimal.connectjava.api.ConnectErrorOrigin;
 import io.suboptimal.connectjava.api.ConnectPayload;
 import io.suboptimal.connectjava.codec.ConnectCodec;
 import io.suboptimal.connectjava.compression.ConnectCompression;
@@ -39,13 +41,13 @@ class UnaryResponseClientHandler extends SimpleChannelInboundHandler<FullHttpRes
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, FullHttpResponse response) {
-        int statusCode = response.status().code();
-        MetaContainer meta = buildMeta(statusCode, response);
+        MetaContainer meta = buildMeta(response);
+        int statusCode = meta.connectResponseMeta.statusCode();
 
         observer.onResponseHeaders(meta.connectResponseMeta());
 
-        ConnectClientResponseStart responseStart =
-                new ConnectClientResponseStart(callStart.serviceDefinition(), callStart.methodDefinition(), meta.connectResponseMeta);
+        ConnectClientResponseStart responseStart = new ConnectClientResponseStart(callStart.serviceDefinition(),
+                callStart.methodDefinition(), meta.connectResponseMeta);
 
         ctx.fireChannelRead(responseStart);
 
@@ -53,7 +55,7 @@ class UnaryResponseClientHandler extends SimpleChannelInboundHandler<FullHttpRes
             ConnectError error = parseErrorResponse(ctx, response, statusCode);
             closed = true;
             observer.onCallComplete(error);
-            ctx.fireChannelRead(error);
+            ctx.fireChannelRead(new ConnectEndOfStream(meta.trailers(), error));
             return;
         }
 
@@ -63,7 +65,7 @@ class UnaryResponseClientHandler extends SimpleChannelInboundHandler<FullHttpRes
             ConnectError error = ConnectError.unknown("Unsupported or missing Content-Type in response");
             closed = true;
             observer.onCallComplete(error);
-            ctx.fireChannelRead(error);
+            ctx.fireChannelRead(new ConnectEndOfStream(meta.trailers(), error));
             return;
         }
 
@@ -72,7 +74,7 @@ class UnaryResponseClientHandler extends SimpleChannelInboundHandler<FullHttpRes
             ConnectError error = ConnectError.internal("Response codec '" + codecName + "' does not match request codec '" + requestCodecName + "'");
             closed = true;
             observer.onCallComplete(error);
-            ctx.fireChannelRead(error);
+            ctx.fireChannelRead(new ConnectEndOfStream(meta.trailers(), error));
             return;
         }
 
@@ -86,7 +88,7 @@ class UnaryResponseClientHandler extends SimpleChannelInboundHandler<FullHttpRes
             ConnectError error = ConnectError.internal("Decompression failed: " + e.getMessage());
             closed = true;
             observer.onCallComplete(error);
-            ctx.fireChannelRead(error);
+            ctx.fireChannelRead(new ConnectEndOfStream(meta.trailers(), error));
             return;
         }
 
@@ -97,7 +99,7 @@ class UnaryResponseClientHandler extends SimpleChannelInboundHandler<FullHttpRes
             ConnectError error = ConnectError.internal("Deserialization failed: " + e.getMessage());
             closed = true;
             observer.onCallComplete(error);
-            ctx.fireChannelRead(error);
+            ctx.fireChannelRead(new ConnectEndOfStream(meta.trailers(), error));
             return;
         } finally {
             decompressed.release();
@@ -116,7 +118,7 @@ class UnaryResponseClientHandler extends SimpleChannelInboundHandler<FullHttpRes
             closed = true;
             ConnectError error = ConnectError.canceled("Connection reset");
             observer.onCallComplete(error);
-            ctx.fireChannelRead(error);
+            ctx.fireChannelRead(new ConnectEndOfStream(Map.of(), error));
         }
         ctx.fireChannelInactive();
     }
@@ -140,21 +142,25 @@ class UnaryResponseClientHandler extends SimpleChannelInboundHandler<FullHttpRes
         }
 
         ConnectErrorBody parsed = body.length > 0
-            ? config.jsonDeserializer().parseErrorBody(body) : null;
+            ? config.jsonDeserializer().parseUnaryError(body) : null;
 
         ConnectErrorCode code = null;
         if (parsed != null && parsed.codeName() != null) {
             code = ClientHandlerSupport.findErrorCodeByWireName(parsed.codeName());
         }
+
+        // Recognised Connect-code in the JSON body => this is an accepted RPC error; otherwise transport rejection.
+        boolean recognizedRpcError = code != null;
         if (code == null) {
             code = ClientHandlerSupport.httpStatusToErrorCode(statusCode);
         }
 
         String message = (parsed != null && parsed.message() != null)
             ? parsed.message() : response.status().reasonPhrase();
-
         java.util.List<ConnectErrorDetail> details = parsed != null ? parsed.details() : java.util.List.of();
-        return new ConnectError(code, message, details);
+
+        ConnectErrorOrigin origin = recognizedRpcError ? ConnectErrorOrigin.RPC : ConnectErrorOrigin.TRANSPORT;
+        return new ConnectError(code, message, details, origin);
     }
 
     private ConnectCompression resolveResponseEncoding(String encodingHeader) {
@@ -166,7 +172,8 @@ class UnaryResponseClientHandler extends SimpleChannelInboundHandler<FullHttpRes
         return c != null ? c : ConnectIdentityCompression.INSTANCE;
     }
 
-    private static MetaContainer buildMeta(int statusCode, FullHttpResponse response) {
+    private static MetaContainer buildMeta(FullHttpResponse response) {
+        int statusCode = response.status().code();
         Map<String, List<String>> all = new LinkedHashMap<>();
         all.putAll(ClientHandlerSupport.toHeaderMap(response.headers()));
         all.putAll(ClientHandlerSupport.toHeaderMap(response.trailingHeaders()));

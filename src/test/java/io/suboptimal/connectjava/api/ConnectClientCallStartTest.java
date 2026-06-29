@@ -1,4 +1,4 @@
-package io.suboptimal.connectjava.protocol.client;
+package io.suboptimal.connectjava.api;
 
 import io.suboptimal.connectjava.model.ConnectMethodDefinition;
 import io.suboptimal.connectjava.model.ConnectMethodType;
@@ -48,34 +48,6 @@ class ConnectClientCallStartTest {
         ConnectClientCallStart callStart = new ConnectClientCallStart(
             SERVICE, METHOD, Map.of(), true, null);
         assertThat(callStart.codecName()).isNull();
-    }
-
-    @Test
-    void withHeaderAppendsValueAndLowercasesName() {
-        ConnectClientCallStart base = new ConnectClientCallStart(
-            SERVICE, METHOD, Map.of("x-existing", List.of("a")), false, "proto");
-
-        ConnectClientCallStart out = base.withHeader("X-Existing", "b").withHeader("X-New", "c");
-
-        assertThat(out.requestHeaders().get("x-existing")).containsExactly("a", "b");
-        assertThat(out.requestHeaders().get("x-new")).containsExactly("c");
-        // original is unchanged
-        assertThat(base.requestHeaders().get("x-existing")).containsExactly("a");
-        assertThat(base.requestHeaders()).doesNotContainKey("x-new");
-    }
-
-    @Test
-    void withTimeoutMsAndCodecReplaceSingleField() {
-        ConnectClientCallStart base = new ConnectClientCallStart(
-            SERVICE, METHOD, Map.of(), false, "proto", 1000L);
-
-        assertThat(base.withTimeoutMs(5000L).timeoutMs()).isEqualTo(5000L);
-        assertThat(base.withTimeoutMs(5000L).codecName()).isEqualTo("proto");
-        assertThat(base.withCodecName("json").codecName()).isEqualTo("json");
-        assertThat(base.withCodecName("json").timeoutMs()).isEqualTo(1000L);
-        // original unchanged
-        assertThat(base.timeoutMs()).isEqualTo(1000L);
-        assertThat(base.codecName()).isEqualTo("proto");
     }
 
     @Test

@@ -25,7 +25,7 @@ import io.suboptimal.connectjava.codec.protobuf.ConnectProtobufCodecs;
 import io.suboptimal.connectjava.model.ConnectMethodDefinition;
 import io.suboptimal.connectjava.model.ConnectMethodType;
 import io.suboptimal.connectjava.model.ConnectServiceDefinition;
-import io.suboptimal.connectjava.protocol.client.ConnectClientCallStart;
+import io.suboptimal.connectjava.api.ConnectClientCallStart;
 import io.suboptimal.connectjava.protocol.client.ConnectClientProtocol;
 import io.suboptimal.connectjava.protocol.client.ConnectClientProtocolConfig;
 import io.suboptimal.connectjava.protocol.client.ConnectClientProtocolParameters;

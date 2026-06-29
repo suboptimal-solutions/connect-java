@@ -4,6 +4,7 @@ import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.QueryStringDecoder;
+import io.suboptimal.connectjava.api.ConnectClientCallStart;
 import io.suboptimal.connectjava.api.ConnectEndOfStream;
 import io.suboptimal.connectjava.api.ConnectErrorCode;
 import io.suboptimal.connectjava.api.ConnectPayload;

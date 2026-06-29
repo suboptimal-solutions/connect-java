@@ -7,10 +7,11 @@ import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
+import io.suboptimal.connectjava.api.ConnectClientCallStart;
 import io.suboptimal.connectjava.api.ConnectClientResponseStart;
 import io.suboptimal.connectjava.api.ConnectEndOfStream;
-import io.suboptimal.connectjava.api.ConnectError;
 import io.suboptimal.connectjava.api.ConnectErrorCode;
+import io.suboptimal.connectjava.api.ConnectErrorOrigin;
 import io.suboptimal.connectjava.api.ConnectPayload;
 import io.suboptimal.connectjava.api.ConnectResponseMeta;
 import io.suboptimal.connectjava.codec.ConnectCodec;
@@ -113,8 +114,11 @@ class UnaryResponseClientHandlerTest {
         Object first = channel.readInbound();
         assertThat(first).isInstanceOf(ConnectClientResponseStart.class);
         Object second = channel.readInbound();
-        assertThat(second).isInstanceOf(ConnectError.class);
-        assertThat(((ConnectError) second).code()).isEqualTo(ConnectErrorCode.UNIMPLEMENTED);
+        assertThat(second).isInstanceOf(ConnectEndOfStream.class);
+        ConnectEndOfStream eos = (ConnectEndOfStream) second;
+        assertThat(eos.error()).isNotNull();
+        assertThat(eos.error().code()).isEqualTo(ConnectErrorCode.UNIMPLEMENTED);
+        assertThat(eos.error().origin()).isEqualTo(ConnectErrorOrigin.TRANSPORT);
         assertThat(observer.completeCount).isEqualTo(1);
         Object next = channel.readInbound();
         assertThat(next).isNull();
@@ -140,10 +144,13 @@ class UnaryResponseClientHandlerTest {
             Object first = channel.readInbound();
             assertThat(first).isInstanceOf(ConnectClientResponseStart.class);
             Object second = channel.readInbound();
-            assertThat(second).isInstanceOf(ConnectError.class);
-            assertThat(((ConnectError) second).code())
+            assertThat(second).isInstanceOf(ConnectEndOfStream.class);
+            ConnectEndOfStream eos = (ConnectEndOfStream) second;
+            assertThat(eos.error()).isNotNull();
+            assertThat(eos.error().code())
                 .as("status %d", status)
                 .isEqualTo(expected);
+            assertThat(eos.error().origin()).isEqualTo(ConnectErrorOrigin.TRANSPORT);
             channel.finishAndReleaseAll();
         });
     }
@@ -157,9 +164,13 @@ class UnaryResponseClientHandlerTest {
         channel.writeInbound(response(400, body, "application/json", null));
 
         assertThat((Object) channel.readInbound()).isInstanceOf(ConnectClientResponseStart.class);
-        ConnectError error = channel.readInbound();
-        assertThat(error.code()).isEqualTo(ConnectErrorCode.NOT_FOUND);
-        assertThat(error.message()).isEqualTo("nope");
+        Object second = channel.readInbound();
+        assertThat(second).isInstanceOf(ConnectEndOfStream.class);
+        ConnectEndOfStream eos = (ConnectEndOfStream) second;
+        assertThat(eos.error()).isNotNull();
+        assertThat(eos.error().code()).isEqualTo(ConnectErrorCode.NOT_FOUND);
+        assertThat(eos.error().message()).isEqualTo("nope");
+        assertThat(eos.error().origin()).isEqualTo(ConnectErrorOrigin.RPC);
 
         channel.finishAndReleaseAll();
     }
@@ -175,10 +186,13 @@ class UnaryResponseClientHandlerTest {
         ConnectClientResponseStart responseStart = channel.readInbound();
         assertThat(responseStart).isNotNull();
 
-        ConnectError error = channel.readInbound();
-        assertThat(error.code()).isEqualTo(ConnectErrorCode.INTERNAL);
-        assertThat(error.message()).contains("json");
-        assertThat(error.message()).contains("proto");
+        Object second = channel.readInbound();
+        assertThat(second).isInstanceOf(ConnectEndOfStream.class);
+        ConnectEndOfStream eos = (ConnectEndOfStream) second;
+        assertThat(eos.error()).isNotNull();
+        assertThat(eos.error().code()).isEqualTo(ConnectErrorCode.INTERNAL);
+        assertThat(eos.error().message()).contains("json");
+        assertThat(eos.error().message()).contains("proto");
         assertThat(observer.completeCount).isEqualTo(1);
 
         channel.finishAndReleaseAll();
@@ -194,9 +208,12 @@ class UnaryResponseClientHandlerTest {
         ConnectClientResponseStart responseStart = channel.readInbound();
         assertThat(responseStart).isNotNull();
 
-        ConnectError error = channel.readInbound();
-        assertThat(error.code()).isEqualTo(ConnectErrorCode.UNKNOWN);
-        assertThat(error.message()).contains("Content-Type");
+        Object second = channel.readInbound();
+        assertThat(second).isInstanceOf(ConnectEndOfStream.class);
+        ConnectEndOfStream eos = (ConnectEndOfStream) second;
+        assertThat(eos.error()).isNotNull();
+        assertThat(eos.error().code()).isEqualTo(ConnectErrorCode.UNKNOWN);
+        assertThat(eos.error().message()).contains("Content-Type");
 
         channel.finishAndReleaseAll();
     }
@@ -214,9 +231,12 @@ class UnaryResponseClientHandlerTest {
         ConnectClientResponseStart responseStart = channel.readInbound();
         assertThat(responseStart).isNotNull();
 
-        ConnectError error = channel.readInbound();
-        assertThat((error).code()).isEqualTo(ConnectErrorCode.INTERNAL);
-        assertThat((error).message()).contains("Deserialization failed");
+        Object second = channel.readInbound();
+        assertThat(second).isInstanceOf(ConnectEndOfStream.class);
+        ConnectEndOfStream eos = (ConnectEndOfStream) second;
+        assertThat(eos.error()).isNotNull();
+        assertThat(eos.error().code()).isEqualTo(ConnectErrorCode.INTERNAL);
+        assertThat(eos.error().message()).contains("Deserialization failed");
         assertThat(observer.completeCount).isEqualTo(1);
 
         channel.finishAndReleaseAll();
@@ -232,9 +252,12 @@ class UnaryResponseClientHandlerTest {
         ConnectClientResponseStart responseStart = channel.readInbound();
         assertThat(responseStart).isNotNull();
 
-        ConnectError error = channel.readInbound();
-        assertThat(error.code()).isEqualTo(ConnectErrorCode.INTERNAL);
-        assertThat(error.message()).contains("Decompression failed");
+        Object second = channel.readInbound();
+        assertThat(second).isInstanceOf(ConnectEndOfStream.class);
+        ConnectEndOfStream eos = (ConnectEndOfStream) second;
+        assertThat(eos.error()).isNotNull();
+        assertThat(eos.error().code()).isEqualTo(ConnectErrorCode.INTERNAL);
+        assertThat(eos.error().message()).contains("Decompression failed");
 
         channel.finishAndReleaseAll();
     }
@@ -246,8 +269,11 @@ class UnaryResponseClientHandlerTest {
 
         channel.pipeline().fireChannelInactive();
 
-        ConnectError error = channel.readInbound();
-        assertThat(error.code()).isEqualTo(ConnectErrorCode.CANCELED);
+        Object terminal = channel.readInbound();
+        assertThat(terminal).isInstanceOf(ConnectEndOfStream.class);
+        ConnectEndOfStream eos = (ConnectEndOfStream) terminal;
+        assertThat(eos.error()).isNotNull();
+        assertThat(eos.error().code()).isEqualTo(ConnectErrorCode.CANCELED);
         assertThat(observer.completeCount).isEqualTo(1);
 
         channel.finishAndReleaseAll();
@@ -292,13 +318,15 @@ class UnaryResponseClientHandlerTest {
         channel.writeInbound(response(400, body, "application/json", null));
 
         channel.readInbound(); // ConnectClientResponseStart
-        ConnectError error = channel.readInbound();
-
-        assertThat(error.code()).isEqualTo(ConnectErrorCode.NOT_FOUND);
-        assertThat(error.message()).isEqualTo("nope");
-        assertThat(error.details()).hasSize(1);
-        assertThat(error.details().get(0).type()).isEqualTo("google.rpc.RetryInfo");
-        assertThat(error.details().get(0).value()).isEqualTo(detailBytes);
+        Object second = channel.readInbound();
+        assertThat(second).isInstanceOf(ConnectEndOfStream.class);
+        ConnectEndOfStream eos = (ConnectEndOfStream) second;
+        assertThat(eos.error()).isNotNull();
+        assertThat(eos.error().code()).isEqualTo(ConnectErrorCode.NOT_FOUND);
+        assertThat(eos.error().message()).isEqualTo("nope");
+        assertThat(eos.error().details()).hasSize(1);
+        assertThat(eos.error().details().get(0).type()).isEqualTo("google.rpc.RetryInfo");
+        assertThat(eos.error().details().get(0).value()).isEqualTo(detailBytes);
 
         channel.finishAndReleaseAll();
     }
@@ -314,10 +342,13 @@ class UnaryResponseClientHandlerTest {
             "application/json", "gzip"));
 
         channel.readInbound(); // ConnectClientResponseStart
-        Object inbound = channel.readInbound();
-        assertThat(inbound).isInstanceOf(ConnectError.class);
-        assertThat(((ConnectError) inbound).code()).isEqualTo(ConnectErrorCode.OUT_OF_RANGE);
-        assertThat(((ConnectError) inbound).message()).isEqualTo("oops");
+        Object second = channel.readInbound();
+        assertThat(second).isInstanceOf(ConnectEndOfStream.class);
+        ConnectEndOfStream eos = (ConnectEndOfStream) second;
+        assertThat(eos.error()).isNotNull();
+        assertThat(eos.error().code()).isEqualTo(ConnectErrorCode.OUT_OF_RANGE);
+        assertThat(eos.error().message()).isEqualTo("oops");
+        assertThat(eos.error().origin()).isEqualTo(ConnectErrorOrigin.RPC);
     }
 
     @Test
@@ -329,9 +360,12 @@ class UnaryResponseClientHandlerTest {
             "application/json", "gzip"));
 
         channel.readInbound(); // ConnectClientResponseStart
-        Object inbound = channel.readInbound();
-        assertThat(inbound).isInstanceOf(ConnectError.class);
-        assertThat(((ConnectError) inbound).code()).isEqualTo(ConnectErrorCode.UNAVAILABLE);
+        Object second = channel.readInbound();
+        assertThat(second).isInstanceOf(ConnectEndOfStream.class);
+        ConnectEndOfStream eos = (ConnectEndOfStream) second;
+        assertThat(eos.error()).isNotNull();
+        assertThat(eos.error().code()).isEqualTo(ConnectErrorCode.UNAVAILABLE);
+        assertThat(eos.error().origin()).isEqualTo(ConnectErrorOrigin.TRANSPORT);
     }
 
     @Test

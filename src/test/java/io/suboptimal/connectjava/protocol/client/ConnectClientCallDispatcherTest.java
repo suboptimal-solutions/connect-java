@@ -1,6 +1,7 @@
 package io.suboptimal.connectjava.protocol.client;
 
 import io.netty.channel.embedded.EmbeddedChannel;
+import io.suboptimal.connectjava.api.ConnectClientCallStart;
 import io.suboptimal.connectjava.api.ConnectEndOfStream;
 import io.suboptimal.connectjava.api.ConnectError;
 import io.suboptimal.connectjava.api.ConnectErrorCode;
@@ -33,8 +34,10 @@ class ConnectClientCallDispatcherTest {
         "SafeUnary", ConnectMethodType.UNARY, UnaryGetRequest.class, UnaryGetResponse.class, true);
     private static final ConnectMethodDefinition SERVER_STREAMING = new ConnectMethodDefinition(
         "ServerStreaming", ConnectMethodType.SERVER_STREAMING, StreamingRequest.class, StreamingResponse.class, false);
+    private static final ConnectMethodDefinition BIDI_STREAMING = new ConnectMethodDefinition(
+        "Bidi", ConnectMethodType.BIDI_STREAMING, StreamingRequest.class, StreamingResponse.class, false);
     private static final ConnectServiceDefinition SERVICE = new ConnectServiceDefinition(
-        "svc.Service", List.of(UNARY_POST, UNARY_IDEMPOTENT, SERVER_STREAMING), null);
+        "svc.Service", List.of(UNARY_POST, UNARY_IDEMPOTENT, SERVER_STREAMING, BIDI_STREAMING), null);
 
     private EmbeddedChannel channel;
 
@@ -96,6 +99,21 @@ class ConnectClientCallDispatcherTest {
     }
 
     @Test
+    void rejectsBidiStreaming() {
+        install(ClientTestSupport.config());
+        channel.writeOutbound(callStart(BIDI_STREAMING, false, "proto"));
+
+        Object inbound = channel.readInbound();
+        assertThat(inbound).isInstanceOf(ConnectEndOfStream.class);
+        ConnectEndOfStream eos = (ConnectEndOfStream) inbound;
+        assertThat(eos.error()).isNotNull();
+        assertThat(eos.error().code()).isEqualTo(ConnectErrorCode.UNIMPLEMENTED);
+        assertThat(channel.pipeline().get(ConnectClientPipeline.STREAMING_HANDLER)).isNull();
+        Object outbound = channel.readOutbound();
+        assertThat(outbound).isNull(); // no request sent
+    }
+
+    @Test
     void nullCodecNameProceeds() {
         install(ClientTestSupport.config());
         channel.writeOutbound(callStart(UNARY_POST, false, null));
@@ -121,22 +139,26 @@ class ConnectClientCallDispatcherTest {
         channel.writeOutbound(callStart(UNARY_POST, false, "bogus"));
 
         Object inbound = channel.readInbound();
-        assertThat(inbound).isInstanceOf(ConnectError.class);
-        assertThat(((ConnectError) inbound).code()).isEqualTo(ConnectErrorCode.INTERNAL);
-        assertThat(((ConnectError) inbound).message()).contains("Unknown codec");
+        assertThat(inbound).isInstanceOf(ConnectEndOfStream.class);
+        ConnectEndOfStream eos = (ConnectEndOfStream) inbound;
+        assertThat(eos.error()).isNotNull();
+        assertThat(eos.error().code()).isEqualTo(ConnectErrorCode.INTERNAL);
+        assertThat(eos.error().message()).contains("Unknown codec");
         assertThat(channel.pipeline().get(ConnectClientPipeline.UNARY_POST_HANDLER)).isNull();
     }
 
     @Test
-    void interceptorRejectDeliversErrorAndInstallsNoHandler() {
+    void interceptorRejectDeliversEosAndInstallsNoHandler() {
         ConnectError rejection = ConnectError.permissionDenied("denied");
         install(ClientTestSupport.config(List.of(ClientTestSupport.rejectingInterceptor(rejection))));
 
         channel.writeOutbound(callStart(UNARY_POST, false, "proto"));
 
         Object inbound = channel.readInbound();
-        assertThat(inbound).isInstanceOf(ConnectError.class);
-        assertThat(((ConnectError) inbound).code()).isEqualTo(ConnectErrorCode.PERMISSION_DENIED);
+        assertThat(inbound).isInstanceOf(ConnectEndOfStream.class);
+        ConnectEndOfStream eos = (ConnectEndOfStream) inbound;
+        assertThat(eos.error()).isNotNull();
+        assertThat(eos.error().code()).isEqualTo(ConnectErrorCode.PERMISSION_DENIED);
         assertThat(channel.pipeline().get(ConnectClientPipeline.UNARY_POST_HANDLER)).isNull();
     }
 
@@ -183,9 +205,11 @@ class ConnectClientCallDispatcherTest {
     }
 
     @Test
-    void interceptorCanRewriteOutgoingHeaders() {
-        ConnectClientInterceptor adder = cs ->
-            ConnectClientInterceptor.continueWith(cs.withHeader("x-test", "v1"));
+    void interceptorCanMutateOutgoingHeaders() {
+        ConnectClientInterceptor adder = b -> {
+            b.addHeader("x-test", "v1");
+            return ConnectClientInterceptor.continueCall();
+        };
         install(ClientTestSupport.config(List.of(adder)));
 
         channel.writeOutbound(callStart(UNARY_POST, false, "proto"));
@@ -200,13 +224,16 @@ class ConnectClientCallDispatcherTest {
     }
 
     @Test
-    void rewriteIsThreadedToNextInterceptor() {
-        AtomicReference<ConnectClientCallStart> seenBySecond = new AtomicReference<>();
-        ConnectClientInterceptor first = cs ->
-            ConnectClientInterceptor.continueWith(cs.withHeader("x-a", "1"));
-        ConnectClientInterceptor second = cs -> {
-            seenBySecond.set(cs);
-            return ConnectClientInterceptor.continueWith(cs.withHeader("x-b", "2"));
+    void mutationsAreSharedAcrossInterceptors() {
+        AtomicReference<String> seenBySecond = new AtomicReference<>();
+        ConnectClientInterceptor first = b -> {
+            b.addHeader("x-a", "1");
+            return ConnectClientInterceptor.continueCall();
+        };
+        ConnectClientInterceptor second = b -> {
+            seenBySecond.set(b.headerValues("x-a").isEmpty() ? null : b.headerValues("x-a").getFirst());
+            b.addHeader("x-b", "2");
+            return ConnectClientInterceptor.continueCall();
         };
         install(ClientTestSupport.config(List.of(first, second)));
 
@@ -214,8 +241,8 @@ class ConnectClientCallDispatcherTest {
         channel.writeOutbound(new ConnectPayload(UnaryPostRequest.newBuilder().setText("x").build()));
         channel.writeOutbound(ConnectEndOfStream.INSTANCE);
 
-        // the second interceptor observed the first interceptor's rewrite
-        assertThat(seenBySecond.get().requestHeaders()).containsKey("x-a");
+        // second interceptor saw first interceptor's mutation
+        assertThat(seenBySecond.get()).isEqualTo("1");
 
         Object out = channel.readOutbound();
         assertThat(out).isInstanceOf(FullHttpRequest.class);
@@ -226,17 +253,21 @@ class ConnectClientCallDispatcherTest {
     }
 
     @Test
-    void codecValidationAppliesToRewrittenCodec() {
-        // original codec is valid; an interceptor rewrites it to an unregistered one
-        ConnectClientInterceptor breaker = cs ->
-            ConnectClientInterceptor.continueWith(cs.withCodecName("bogus"));
+    void codecValidationAppliesToMutatedCodec() {
+        // original codec is valid; an interceptor mutates it to an unregistered one
+        ConnectClientInterceptor breaker = b -> {
+            b.codecName("bogus");
+            return ConnectClientInterceptor.continueCall();
+        };
         install(ClientTestSupport.config(List.of(breaker)));
 
         channel.writeOutbound(callStart(UNARY_POST, false, "proto"));
 
         Object inbound = channel.readInbound();
-        assertThat(inbound).isInstanceOf(ConnectError.class);
-        assertThat(((ConnectError) inbound).message()).contains("Unknown codec");
+        assertThat(inbound).isInstanceOf(ConnectEndOfStream.class);
+        ConnectEndOfStream eos = (ConnectEndOfStream) inbound;
+        assertThat(eos.error()).isNotNull();
+        assertThat(eos.error().message()).contains("Unknown codec");
         assertThat(channel.pipeline().get(ConnectClientPipeline.UNARY_POST_HANDLER)).isNull();
     }
 

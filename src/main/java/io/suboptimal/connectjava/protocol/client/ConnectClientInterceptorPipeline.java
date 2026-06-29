@@ -1,5 +1,6 @@
 package io.suboptimal.connectjava.protocol.client;
 
+import io.suboptimal.connectjava.api.ConnectClientCallStartBuilder;
 import io.suboptimal.connectjava.api.ConnectResponseMeta;
 import io.suboptimal.connectjava.api.ConnectError;
 import org.jspecify.annotations.Nullable;
@@ -16,32 +17,21 @@ final class ConnectClientInterceptorPipeline {
         this.interceptors = List.copyOf(interceptors);
     }
 
-    /**
-     * Runs the interceptor chain. Returns a {@link ConnectClientInterceptor.Decision.Continue} whose
-     * {@code callStart()} is the effective (possibly rewritten) request, or a
-     * {@link ConnectClientInterceptor.Decision.Reject} if any interceptor rejected the call.
-     */
-    ConnectClientInterceptor.Decision interceptCall(ConnectClientCallStart callStart) {
+    ConnectClientInterceptor.Decision interceptCall(ConnectClientCallStartBuilder builder) {
         if (interceptors.isEmpty()) {
-            return ConnectClientInterceptor.continueWith(callStart);
+            return ConnectClientInterceptor.continueCall();
         }
 
-        ConnectClientCallStart current = callStart;
         List<ConnectClientCallObserver> observers = new ArrayList<>(interceptors.size());
         for (ConnectClientInterceptor interceptor : interceptors) {
-            switch (interceptor.interceptCall(current)) {
-                case ConnectClientInterceptor.Decision.Continue(var observer, var modified) -> {
-                    if (modified != null) {
-                        current = modified;
-                    }
-                    observers.add(observer);
-                }
-                case ConnectClientInterceptor.Decision.Reject(ConnectClientCallObserver ignore, ConnectError error) -> {
+            switch (interceptor.interceptCall(builder)) {
+                case ConnectClientInterceptor.Decision.Continue(var observer) -> observers.add(observer);
+                case ConnectClientInterceptor.Decision.Reject(var ignore, var error) -> {
                     return new ConnectClientInterceptor.Decision.Reject(composite(observers), error);
                 }
             }
         }
-        return ConnectClientInterceptor.continueWith(current, composite(observers));
+        return ConnectClientInterceptor.continueWith(composite(observers));
     }
 
     private static ConnectClientCallObserver composite(List<ConnectClientCallObserver> observers) {
@@ -65,12 +55,16 @@ final class ConnectClientInterceptorPipeline {
     {
         @Override
         public void onRequestPayload(Object payload) {
-            observers.forEach(o -> o.onRequestPayload(payload));
+            for (int i = 0; i < observers.size(); i++) {
+                observers.get(i).onRequestPayload(payload);
+            }
         }
 
         @Override
         public void onRequestFinished() {
-            observers.forEach(ConnectClientCallObserver::onRequestFinished);
+            for (int i = 0; i < observers.size(); i++) {
+                observers.get(i).onRequestFinished();
+            }
         }
 
         @Override
@@ -82,7 +76,9 @@ final class ConnectClientInterceptorPipeline {
 
         @Override
         public void onResponsePayload(Object payload) {
-            observers.forEach(o -> o.onResponsePayload(payload));
+            for (int i = 0; i < observers.size(); i++) {
+                observers.get(i).onResponsePayload(payload);
+            }
         }
 
         @Override

@@ -12,6 +12,6 @@ import java.util.List;
  * @param message  human-readable message, or {@code null} if absent
  * @param details  rich error details; empty if the {@code details} array is absent
  */
-public record ConnectErrorBody(@Nullable String codeName,
+record ConnectErrorBody(@Nullable String codeName,
                                @Nullable String message,
                                List<ConnectErrorDetail> details) {}

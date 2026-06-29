@@ -14,10 +14,11 @@ import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.LastHttpContent;
+import io.suboptimal.connectjava.api.ConnectClientCallStart;
 import io.suboptimal.connectjava.api.ConnectClientResponseStart;
 import io.suboptimal.connectjava.api.ConnectEndOfStream;
-import io.suboptimal.connectjava.api.ConnectError;
 import io.suboptimal.connectjava.api.ConnectErrorCode;
+import io.suboptimal.connectjava.api.ConnectErrorOrigin;
 import io.suboptimal.connectjava.api.ConnectPayload;
 import io.suboptimal.connectjava.codec.ConnectCodec;
 import io.suboptimal.connectjava.model.ConnectMethodDefinition;
@@ -44,10 +45,8 @@ class StreamingClientHandlerTest {
         "ServerStreaming", ConnectMethodType.SERVER_STREAMING, StreamingRequest.class, StreamingResponse.class, false);
     private static final ConnectMethodDefinition CLIENT_STREAMING = new ConnectMethodDefinition(
         "ClientStreaming", ConnectMethodType.CLIENT_STREAMING, StreamingRequest.class, StreamingResponse.class, false);
-    private static final ConnectMethodDefinition BIDI_STREAMING = new ConnectMethodDefinition(
-        "Bidi", ConnectMethodType.BIDI_STREAMING, StreamingRequest.class, StreamingResponse.class, false);
     private static final ConnectServiceDefinition SERVICE = new ConnectServiceDefinition(
-        SERVICE_NAME, List.of(SERVER_STREAMING, CLIENT_STREAMING, BIDI_STREAMING), null);
+        SERVICE_NAME, List.of(SERVER_STREAMING, CLIENT_STREAMING), null);
 
     private final ConnectCodec proto = ClientTestSupport.protoCodec();
     private EmbeddedChannel channel;
@@ -153,18 +152,6 @@ class StreamingClientHandlerTest {
     }
 
     @Test
-    void rejectsBidiStreaming() {
-        install(BIDI_STREAMING);
-        start(BIDI_STREAMING);
-
-        Object inbound = channel.readInbound();
-        assertThat(inbound).isInstanceOf(ConnectError.class);
-        assertThat(((ConnectError) inbound).code()).isEqualTo(ConnectErrorCode.UNIMPLEMENTED);
-        Object outbound = channel.readOutbound();
-        assertThat(outbound).isNull(); // no request sent
-    }
-
-    @Test
     void serverStreamingRejectsSecondRequest() {
         install(SERVER_STREAMING);
         start(SERVER_STREAMING);
@@ -175,8 +162,10 @@ class StreamingClientHandlerTest {
         channel.writeOutbound(new ConnectPayload(StreamingRequest.newBuilder().setText("2").build()));
 
         Object inbound = channel.readInbound();
-        assertThat(inbound).isInstanceOf(ConnectError.class);
-        assertThat(((ConnectError) inbound).code()).isEqualTo(ConnectErrorCode.UNIMPLEMENTED);
+        assertThat(inbound).isInstanceOf(ConnectEndOfStream.class);
+        ConnectEndOfStream eos = (ConnectEndOfStream) inbound;
+        assertThat(eos.error()).isNotNull();
+        assertThat(eos.error().code()).isEqualTo(ConnectErrorCode.UNIMPLEMENTED);
     }
 
     // ---- inbound: server-streaming ----
@@ -252,9 +241,11 @@ class StreamingClientHandlerTest {
         channel.writeInbound(dataFrame(StreamingResponse.newBuilder().setText("2").build()));
 
         Object inbound = channel.readInbound();
-        assertThat(inbound).isInstanceOf(ConnectError.class);
-        assertThat(((ConnectError) inbound).code()).isEqualTo(ConnectErrorCode.UNIMPLEMENTED);
-        assertThat(((ConnectError) inbound).message()).contains("more than one response message");
+        assertThat(inbound).isInstanceOf(ConnectEndOfStream.class);
+        ConnectEndOfStream eos = (ConnectEndOfStream) inbound;
+        assertThat(eos.error()).isNotNull();
+        assertThat(eos.error().code()).isEqualTo(ConnectErrorCode.UNIMPLEMENTED);
+        assertThat(eos.error().message()).contains("more than one response message");
     }
 
     // ---- inbound: errors ----
@@ -271,13 +262,18 @@ class StreamingClientHandlerTest {
         response.headers().set(HttpHeaderNames.TRANSFER_ENCODING, HttpHeaderValues.CHUNKED);
         channel.writeInbound(response);
 
-        Object inbound = channel.readInbound();
-        assertThat(inbound).isInstanceOf(ConnectError.class);
-        assertThat(((ConnectError) inbound).code()).isEqualTo(ConnectErrorCode.INTERNAL);
-        assertThat(((ConnectError) inbound).message()).contains("json");
+        // ТП.1: ResponseStart fires first even on codec mismatch
+        Object first = channel.readInbound();
+        assertThat(first).isInstanceOf(ConnectClientResponseStart.class);
+
+        Object second = channel.readInbound();
+        assertThat(second).isInstanceOf(ConnectEndOfStream.class);
+        ConnectEndOfStream eos = (ConnectEndOfStream) second;
+        assertThat(eos.error()).isNotNull();
+        assertThat(eos.error().code()).isEqualTo(ConnectErrorCode.INTERNAL);
+        assertThat(eos.error().message()).contains("json");
         assertThat(observer.completeCount).isEqualTo(1);
-        // no exchange must be fired — check happened before onResponseHeaders
-        assertThat(observer.events).doesNotContain("onResponseHeaders");
+        assertThat(observer.events).contains("onResponseHeaders");
     }
 
     @Test
@@ -295,9 +291,11 @@ class StreamingClientHandlerTest {
         channel.writeInbound(new DefaultHttpContent(buf));
 
         Object inbound = channel.readInbound();
-        assertThat(inbound).isInstanceOf(ConnectError.class);
-        assertThat(((ConnectError) inbound).code()).isEqualTo(ConnectErrorCode.INTERNAL);
-        assertThat(((ConnectError) inbound).message()).contains("compression");
+        assertThat(inbound).isInstanceOf(ConnectEndOfStream.class);
+        ConnectEndOfStream eos = (ConnectEndOfStream) inbound;
+        assertThat(eos.error()).isNotNull();
+        assertThat(eos.error().code()).isEqualTo(ConnectErrorCode.INTERNAL);
+        assertThat(eos.error().message()).contains("compression");
         assertThat(observer.completeCount).isEqualTo(1);
     }
 
@@ -339,7 +337,7 @@ class StreamingClientHandlerTest {
         assertThat(eos.trailers().get("x-custom-trailer")).containsExactly("a", "b");
         assertThat(observer.completeError).isNotNull();
 
-        // ровно одно терминальное сообщение, отдельного ConnectError быть не должно
+        // exactly one terminal message, no standalone ConnectError
         assertThat((Object) channel.readInbound()).isNull();
     }
 
@@ -353,9 +351,16 @@ class StreamingClientHandlerTest {
             HttpVersion.HTTP_1_1, HttpResponseStatus.SERVICE_UNAVAILABLE);
         channel.writeInbound(response);
 
-        Object inbound = channel.readInbound();
-        assertThat(inbound).isInstanceOf(ConnectError.class);
-        assertThat(((ConnectError) inbound).code()).isEqualTo(ConnectErrorCode.UNAVAILABLE);
+        // ТП.1: ResponseStart fires first; ТП.2: terminal is ConnectEndOfStream
+        Object first = channel.readInbound();
+        assertThat(first).isInstanceOf(ConnectClientResponseStart.class);
+
+        Object second = channel.readInbound();
+        assertThat(second).isInstanceOf(ConnectEndOfStream.class);
+        ConnectEndOfStream eos = (ConnectEndOfStream) second;
+        assertThat(eos.error()).isNotNull();
+        assertThat(eos.error().code()).isEqualTo(ConnectErrorCode.UNAVAILABLE);
+        assertThat(eos.error().origin()).isEqualTo(ConnectErrorOrigin.TRANSPORT);
     }
 
     @Test
@@ -367,10 +372,16 @@ class StreamingClientHandlerTest {
         HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
         channel.writeInbound(response);
 
-        Object inbound = channel.readInbound();
-        assertThat(inbound).isInstanceOf(ConnectError.class);
-        assertThat(((ConnectError) inbound).code()).isEqualTo(ConnectErrorCode.UNKNOWN);
-        assertThat(((ConnectError) inbound).message()).contains("Content-Type");
+        // ТП.1: ResponseStart fires first
+        Object first = channel.readInbound();
+        assertThat(first).isInstanceOf(ConnectClientResponseStart.class);
+
+        Object second = channel.readInbound();
+        assertThat(second).isInstanceOf(ConnectEndOfStream.class);
+        ConnectEndOfStream eos = (ConnectEndOfStream) second;
+        assertThat(eos.error()).isNotNull();
+        assertThat(eos.error().code()).isEqualTo(ConnectErrorCode.UNKNOWN);
+        assertThat(eos.error().message()).contains("Content-Type");
     }
 
     @Test
@@ -384,8 +395,10 @@ class StreamingClientHandlerTest {
         channel.writeInbound(LastHttpContent.EMPTY_LAST_CONTENT);
 
         Object inbound = channel.readInbound();
-        assertThat(inbound).isInstanceOf(ConnectError.class);
-        assertThat(((ConnectError) inbound).message()).contains("Truncated stream");
+        assertThat(inbound).isInstanceOf(ConnectEndOfStream.class);
+        ConnectEndOfStream eos = (ConnectEndOfStream) inbound;
+        assertThat(eos.error()).isNotNull();
+        assertThat(eos.error().message()).contains("Truncated stream");
     }
 
     @Test
@@ -399,8 +412,10 @@ class StreamingClientHandlerTest {
         channel.writeInbound(dataFrame(StreamingResponse.newBuilder().setText("way too long").build()));
 
         Object inbound = channel.readInbound();
-        assertThat(inbound).isInstanceOf(ConnectError.class);
-        assertThat(((ConnectError) inbound).code()).isEqualTo(ConnectErrorCode.RESOURCE_EXHAUSTED);
+        assertThat(inbound).isInstanceOf(ConnectEndOfStream.class);
+        ConnectEndOfStream eos = (ConnectEndOfStream) inbound;
+        assertThat(eos.error()).isNotNull();
+        assertThat(eos.error().code()).isEqualTo(ConnectErrorCode.RESOURCE_EXHAUSTED);
     }
 
     private HttpContent compressedEndStreamFrame(String json) {
@@ -465,8 +480,10 @@ class StreamingClientHandlerTest {
         channel.writeInbound(new DefaultHttpContent(buf));
 
         Object inbound = channel.readInbound();
-        assertThat(inbound).isInstanceOf(ConnectError.class);
-        assertThat(((ConnectError) inbound).message()).contains("Decompression failed");
+        assertThat(inbound).isInstanceOf(ConnectEndOfStream.class);
+        ConnectEndOfStream eos = (ConnectEndOfStream) inbound;
+        assertThat(eos.error()).isNotNull();
+        assertThat(eos.error().message()).contains("Decompression failed");
         assertThat(observer.completeCount).isEqualTo(1);
     }
 
@@ -504,8 +521,10 @@ class StreamingClientHandlerTest {
         channel.writeInbound(new DefaultHttpContent(buf));
 
         Object inbound = channel.readInbound();
-        assertThat(inbound).isInstanceOf(ConnectError.class);
-        assertThat(((ConnectError) inbound).message()).contains("Decompression failed");
+        assertThat(inbound).isInstanceOf(ConnectEndOfStream.class);
+        ConnectEndOfStream eos = (ConnectEndOfStream) inbound;
+        assertThat(eos.error()).isNotNull();
+        assertThat(eos.error().message()).contains("Decompression failed");
     }
 
     // ---- lifecycle ----
@@ -521,8 +540,10 @@ class StreamingClientHandlerTest {
         channel.pipeline().fireChannelInactive();
 
         Object inbound = channel.readInbound();
-        assertThat(inbound).isInstanceOf(ConnectError.class);
-        assertThat(((ConnectError) inbound).code()).isEqualTo(ConnectErrorCode.CANCELED);
+        assertThat(inbound).isInstanceOf(ConnectEndOfStream.class);
+        ConnectEndOfStream eos = (ConnectEndOfStream) inbound;
+        assertThat(eos.error()).isNotNull();
+        assertThat(eos.error().code()).isEqualTo(ConnectErrorCode.CANCELED);
         assertThat(observer.completeCount).isEqualTo(1);
     }
 
@@ -634,9 +655,11 @@ class StreamingClientHandlerTest {
         channel.writeOutbound(new ConnectPayload("not a protobuf message"));
 
         Object inbound = channel.readInbound();
-        assertThat(inbound).isInstanceOf(ConnectError.class);
-        assertThat(((ConnectError) inbound).code()).isEqualTo(ConnectErrorCode.INTERNAL);
-        assertThat(((ConnectError) inbound).message()).contains("Serialization failed");
+        assertThat(inbound).isInstanceOf(ConnectEndOfStream.class);
+        ConnectEndOfStream eos = (ConnectEndOfStream) inbound;
+        assertThat(eos.error()).isNotNull();
+        assertThat(eos.error().code()).isEqualTo(ConnectErrorCode.INTERNAL);
+        assertThat(eos.error().message()).contains("Serialization failed");
         assertThat(observer.completeCount).isEqualTo(1);
     }
 
@@ -655,9 +678,11 @@ class StreamingClientHandlerTest {
         channel.writeInbound(new DefaultHttpContent(buf));
 
         Object inbound = channel.readInbound();
-        assertThat(inbound).isInstanceOf(ConnectError.class);
-        assertThat(((ConnectError) inbound).code()).isEqualTo(ConnectErrorCode.INTERNAL);
-        assertThat(((ConnectError) inbound).message()).contains("Deserialization failed");
+        assertThat(inbound).isInstanceOf(ConnectEndOfStream.class);
+        ConnectEndOfStream eos = (ConnectEndOfStream) inbound;
+        assertThat(eos.error()).isNotNull();
+        assertThat(eos.error().code()).isEqualTo(ConnectErrorCode.INTERNAL);
+        assertThat(eos.error().message()).contains("Deserialization failed");
         assertThat(observer.completeCount).isEqualTo(1);
     }
 
@@ -674,8 +699,10 @@ class StreamingClientHandlerTest {
         channel.pipeline().remove(StreamingClientHandler.class);
 
         Object inbound = channel.readInbound();
-        assertThat(inbound).isInstanceOf(ConnectError.class);
-        assertThat(((ConnectError) inbound).code()).isEqualTo(ConnectErrorCode.CANCELED);
+        assertThat(inbound).isInstanceOf(ConnectEndOfStream.class);
+        ConnectEndOfStream eos = (ConnectEndOfStream) inbound;
+        assertThat(eos.error()).isNotNull();
+        assertThat(eos.error().code()).isEqualTo(ConnectErrorCode.CANCELED);
         assertThat(observer.completeCount).isEqualTo(1);
     }
 

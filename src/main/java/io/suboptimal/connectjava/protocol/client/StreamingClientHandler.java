@@ -14,10 +14,12 @@ import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.util.ReferenceCountUtil;
+import io.suboptimal.connectjava.api.ConnectClientCallStart;
 import io.suboptimal.connectjava.api.ConnectClientResponseStart;
 import io.suboptimal.connectjava.api.ConnectResponseMeta;
 import io.suboptimal.connectjava.api.ConnectEndOfStream;
 import io.suboptimal.connectjava.api.ConnectError;
+import io.suboptimal.connectjava.api.ConnectErrorOrigin;
 import io.suboptimal.connectjava.api.ConnectPayload;
 import io.suboptimal.connectjava.codec.ConnectCodec;
 import io.suboptimal.connectjava.compression.ConnectCompression;
@@ -72,16 +74,6 @@ class StreamingClientHandler extends ChannelDuplexHandler {
 
         switch (msg) {
             case ConnectClientCallStart ignored when outboundState == OutboundState.IDLE -> {
-                ConnectMethodType type = callStart.methodDefinition().type();
-                if (type == ConnectMethodType.BIDI_STREAMING) {
-                    closed = true;
-                    promise.setSuccess();
-                    ConnectError error = ConnectError.unimplemented("Bidi streaming not supported on HTTP/1.1");
-                    observer.onCallComplete(error);
-                    ctx.fireChannelRead(error);
-                    return;
-                }
-
                 responseEncoding = ConnectIdentityCompression.INSTANCE;
 
                 String uri = "/" + callStart.serviceDefinition().serviceName()
@@ -122,7 +114,7 @@ class StreamingClientHandler extends ChannelDuplexHandler {
                     promise.setSuccess();
                     ConnectError error = ConnectError.unimplemented("Server-streaming method requires exactly one request message");
                     observer.onCallComplete(error);
-                    ctx.fireChannelRead(error);
+                    ctx.fireChannelRead(new ConnectEndOfStream(Map.of(), error));
                     return;
                 }
 
@@ -134,7 +126,7 @@ class StreamingClientHandler extends ChannelDuplexHandler {
                     promise.setSuccess();
                     ConnectError error = ConnectError.internal("Serialization failed: " + e.getMessage());
                     observer.onCallComplete(error);
-                    ctx.fireChannelRead(error);
+                    ctx.fireChannelRead(new ConnectEndOfStream(Map.of(), error));
                     return;
                 }
 
@@ -150,7 +142,7 @@ class StreamingClientHandler extends ChannelDuplexHandler {
                         promise.setSuccess();
                         ConnectError error = ConnectError.internal("Compression failed: " + e.getMessage());
                         observer.onCallComplete(error);
-                        ctx.fireChannelRead(error);
+                        ctx.fireChannelRead(new ConnectEndOfStream(Map.of(), error));
                         return;
                     }
                     encoded.release();
@@ -197,25 +189,36 @@ class StreamingClientHandler extends ChannelDuplexHandler {
 
     private void handleHttpResponse(ChannelHandlerContext ctx, HttpResponse response) {
         int statusCode = response.status().code();
+
+        // ТП.1: as soon as HTTP response metadata arrives, fire ResponseStart before any checks.
+        Map<String, List<String>> headersMap = ClientHandlerSupport.toHeaderMap(response.headers());
+        ConnectResponseMeta responseMeta = new ConnectResponseMeta(statusCode, headersMap);
+        observer.onResponseHeaders(responseMeta);
+        ctx.fireChannelRead(new ConnectClientResponseStart(
+            callStart.serviceDefinition(), callStart.methodDefinition(), responseMeta));
+
         if (statusCode != 200) {
+            // Transport rejection: no EndStreamResponse envelope, no trailers (E.1: origin=TRANSPORT).
             closed = true;
-            ConnectError error = new ConnectError(ClientHandlerSupport.httpStatusToErrorCode(statusCode),
-                    response.status().reasonPhrase());
+            ConnectError error = new ConnectError(
+                    ClientHandlerSupport.httpStatusToErrorCode(statusCode),
+                    response.status().reasonPhrase())
+                .withOrigin(ConnectErrorOrigin.TRANSPORT);
             observer.onCallComplete(error);
-            ctx.fireChannelRead(error);
+            ctx.fireChannelRead(new ConnectEndOfStream(Map.of(), error));
             return;
         }
 
-        String respCodecName = ClientHandlerSupport.codecNameForContentType(response.headers().get(HttpHeaderNames.CONTENT_TYPE));
+        String respCodecName = ClientHandlerSupport.codecNameForContentType(
+            response.headers().get(HttpHeaderNames.CONTENT_TYPE));
         ConnectCodec respCodec = respCodecName != null
                 ? config.codecRegistry().byName(respCodecName)
                 : null;
-
         if (respCodec == null) {
             closed = true;
             ConnectError error = ConnectError.unknown("Unsupported or missing Content-Type in response");
             observer.onCallComplete(error);
-            ctx.fireChannelRead(error);
+            ctx.fireChannelRead(new ConnectEndOfStream(Map.of(), error));
             return;
         }
 
@@ -225,7 +228,7 @@ class StreamingClientHandler extends ChannelDuplexHandler {
             ConnectError error = ConnectError.internal(
                     "Response codec '" + respCodecName + "' does not match request codec '" + requestCodecName + "'");
             observer.onCallComplete(error);
-            ctx.fireChannelRead(error);
+            ctx.fireChannelRead(new ConnectEndOfStream(Map.of(), error));
             return;
         }
 
@@ -238,12 +241,7 @@ class StreamingClientHandler extends ChannelDuplexHandler {
             }
         }
 
-        Map<String, List<String>> headersMap = ClientHandlerSupport.toHeaderMap(response.headers());
-        ConnectResponseMeta responseMeta = new ConnectResponseMeta(statusCode, headersMap);
         decoder = new ConnectEnvelope.Decoder(ctx.alloc(), config.parameters().maxFrameBytes());
-        observer.onResponseHeaders(responseMeta);
-        ctx.fireChannelRead(new ConnectClientResponseStart(
-            callStart.serviceDefinition(), callStart.methodDefinition(), responseMeta));
     }
 
     private void handleHttpContent(ChannelHandlerContext ctx, HttpContent content) {
@@ -272,7 +270,7 @@ class StreamingClientHandler extends ChannelDuplexHandler {
             closed = true;
             ConnectError error = ConnectError.resourceExhausted(e.getMessage());
             observer.onCallComplete(error);
-            ctx.fireChannelRead(error);
+            ctx.fireChannelRead(new ConnectEndOfStream(Map.of(), error));
         }
     }
 
@@ -283,7 +281,7 @@ class StreamingClientHandler extends ChannelDuplexHandler {
             closed = true;
             ConnectError error = ConnectError.internal("Received compressed message but no compression was negotiated");
             observer.onCallComplete(error);
-            ctx.fireChannelRead(error);
+            ctx.fireChannelRead(new ConnectEndOfStream(Map.of(), error));
             return;
         }
 
@@ -295,7 +293,7 @@ class StreamingClientHandler extends ChannelDuplexHandler {
                 closed = true;
                 ConnectError error = ConnectError.internal("Decompression failed: " + e.getMessage());
                 observer.onCallComplete(error);
-                ctx.fireChannelRead(error);
+                ctx.fireChannelRead(new ConnectEndOfStream(Map.of(), error));
                 return;
             } finally {
                 payload.release();
@@ -310,7 +308,7 @@ class StreamingClientHandler extends ChannelDuplexHandler {
             ConnectError error = ConnectError.unimplemented(
                 "Client-streaming method received more than one response message");
             observer.onCallComplete(error);
-            ctx.fireChannelRead(error);
+            ctx.fireChannelRead(new ConnectEndOfStream(Map.of(), error));
             return;
         }
 
@@ -321,7 +319,7 @@ class StreamingClientHandler extends ChannelDuplexHandler {
             closed = true;
             ConnectError error = ConnectError.internal("Deserialization failed: " + e.getMessage());
             observer.onCallComplete(error);
-            ctx.fireChannelRead(error);
+            ctx.fireChannelRead(new ConnectEndOfStream(Map.of(), error));
             return;
         } finally {
             decompressed.release();
@@ -343,7 +341,7 @@ class StreamingClientHandler extends ChannelDuplexHandler {
             } catch (IOException e) {
                 ConnectError error = ConnectError.internal("Decompression failed: " + e.getMessage());
                 observer.onCallComplete(error);
-                ctx.fireChannelRead(error);
+                ctx.fireChannelRead(new ConnectEndOfStream(Map.of(), error));
                 return;
             } finally {
                 payload.release();
@@ -353,8 +351,8 @@ class StreamingClientHandler extends ChannelDuplexHandler {
         byte[] jsonBytes = ClientHandlerSupport.toByteArray(decompressed);
         decompressed.release();
 
-        ConnectError error = config.jsonDeserializer().parseEndStreamError(jsonBytes);
-        Map<String, List<String>> trailers = config.jsonDeserializer().parseEndStreamMetadata(jsonBytes);
+        ConnectError error = config.jsonDeserializer().parseStreamError(jsonBytes);
+        Map<String, List<String>> trailers = config.jsonDeserializer().parseStreamMetadata(jsonBytes);
 
         if (error != null) {
             observer.onCallComplete(error);
@@ -379,7 +377,7 @@ class StreamingClientHandler extends ChannelDuplexHandler {
             closed = true;
             ConnectError error = ConnectError.internal("Truncated stream");
             observer.onCallComplete(error);
-            ctx.fireChannelRead(error);
+            ctx.fireChannelRead(new ConnectEndOfStream(Map.of(), error));
         }
     }
 
@@ -390,7 +388,7 @@ class StreamingClientHandler extends ChannelDuplexHandler {
             closed = true;
             ConnectError error = ConnectError.canceled("Connection reset");
             observer.onCallComplete(error);
-            ctx.fireChannelRead(error);
+            ctx.fireChannelRead(new ConnectEndOfStream(Map.of(), error));
         }
         ctx.fireChannelInactive();
     }
@@ -402,7 +400,7 @@ class StreamingClientHandler extends ChannelDuplexHandler {
             closed = true;
             ConnectError error = ConnectError.canceled("Connection reset");
             observer.onCallComplete(error);
-            ctx.fireChannelRead(error);
+            ctx.fireChannelRead(new ConnectEndOfStream(Map.of(), error));
         }
     }
 
