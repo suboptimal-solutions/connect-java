@@ -18,7 +18,7 @@ import io.suboptimal.connectjava.codec.protobuf.ConnectProtobufJsonCodec;
 import io.suboptimal.connectjava.compression.ConnectCompression;
 import io.suboptimal.connectjava.compression.ConnectGzipCompression;
 import io.suboptimal.connectjava.compression.ConnectIdentityCompression;
-import io.suboptimal.connectjava.protocol.client.ConnectCallTerminatedException;
+import io.suboptimal.connectjava.protocol.ConnectCallTerminatedException;
 import io.suboptimal.connectjava.testfixtures.UnaryPostRequest;
 import io.suboptimal.connectjava.testfixtures.UnaryPostResponse;
 import io.suboptimal.connectjava.model.ConnectMethodDefinition;

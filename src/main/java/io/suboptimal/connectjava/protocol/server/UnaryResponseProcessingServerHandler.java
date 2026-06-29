@@ -18,7 +18,7 @@ import io.suboptimal.connectjava.api.ConnectPayload;
 import io.suboptimal.connectjava.codec.ConnectCodec;
 import io.suboptimal.connectjava.compression.ConnectCompression;
 import io.suboptimal.connectjava.protocol.ConnectMediaType;
-import io.suboptimal.connectjava.protocol.client.ConnectCallTerminatedException;
+import io.suboptimal.connectjava.protocol.ConnectCallTerminatedException;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;

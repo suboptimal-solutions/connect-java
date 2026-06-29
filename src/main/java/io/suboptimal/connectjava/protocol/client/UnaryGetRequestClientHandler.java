@@ -18,6 +18,7 @@ import io.suboptimal.connectjava.api.ConnectError;
 import io.suboptimal.connectjava.api.ConnectPayload;
 import io.suboptimal.connectjava.codec.ConnectCodec;
 import io.suboptimal.connectjava.compression.ConnectCompression;
+import io.suboptimal.connectjava.protocol.ConnectCallTerminatedException;
 import io.suboptimal.connectjava.protocol.ConnectCompressionNegotiation;
 import io.suboptimal.connectjava.protocol.ConnectProtocolHttpHeaders;
 import io.suboptimal.connectjava.protocol.ConnectProtocolVersion;

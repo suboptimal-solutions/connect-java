@@ -25,6 +25,7 @@ import io.suboptimal.connectjava.codec.ConnectCodec;
 import io.suboptimal.connectjava.compression.ConnectCompression;
 import io.suboptimal.connectjava.compression.ConnectIdentityCompression;
 import io.suboptimal.connectjava.model.ConnectMethodType;
+import io.suboptimal.connectjava.protocol.ConnectCallTerminatedException;
 import io.suboptimal.connectjava.protocol.ConnectCompressionNegotiation;
 import io.suboptimal.connectjava.protocol.ConnectEnvelope;
 import io.suboptimal.connectjava.protocol.ConnectMediaType;

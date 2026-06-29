@@ -29,7 +29,7 @@ import io.suboptimal.connectjava.protocol.ConnectCompressionNegotiation;
 import io.suboptimal.connectjava.protocol.ConnectEnvelope;
 import io.suboptimal.connectjava.protocol.ConnectMediaType;
 import io.suboptimal.connectjava.protocol.ConnectProtocolVersion;
-import io.suboptimal.connectjava.protocol.client.ConnectCallTerminatedException;
+import io.suboptimal.connectjava.protocol.ConnectCallTerminatedException;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;

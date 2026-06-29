@@ -13,6 +13,7 @@ import io.suboptimal.connectjava.model.ConnectMethodDefinition;
 import io.suboptimal.connectjava.model.ConnectMethodType;
 import io.suboptimal.connectjava.model.ConnectServiceDefinition;
 import io.suboptimal.connectjava.protocol.ClientTestSupport;
+import io.suboptimal.connectjava.protocol.ConnectCallTerminatedException;
 import io.suboptimal.connectjava.testfixtures.UnaryPostRequest;
 import io.suboptimal.connectjava.testfixtures.UnaryPostResponse;
 import org.junit.jupiter.api.AfterEach;

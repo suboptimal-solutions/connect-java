@@ -28,7 +28,7 @@ import io.suboptimal.connectjava.model.ConnectMethodDefinition;
 import io.suboptimal.connectjava.model.ConnectMethodType;
 import io.suboptimal.connectjava.model.ConnectServiceDefinition;
 import io.suboptimal.connectjava.protocol.ConnectEnvelope;
-import io.suboptimal.connectjava.protocol.client.ConnectCallTerminatedException;
+import io.suboptimal.connectjava.protocol.ConnectCallTerminatedException;
 import io.suboptimal.connectjava.testfixtures.StreamingRequest;
 import io.suboptimal.connectjava.testfixtures.StreamingResponse;
 import org.jspecify.annotations.Nullable;
