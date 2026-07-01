@@ -26,6 +26,8 @@ import java.util.List;
 import java.util.Map;
 
 class UnaryResponseClientHandler extends SimpleChannelInboundHandler<FullHttpResponse> {
+    private static final byte[] EMPTY = new byte[0];
+
     private final ConnectClientCallStart callStart;
     private final ConnectClientProtocolConfig config;
     private final ConnectClientCallObserver observer;
@@ -139,7 +141,7 @@ class UnaryResponseClientHandler extends SimpleChannelInboundHandler<FullHttpRes
             }
         } catch (IOException e) {
             // Body cannot be decoded; fall back to the HTTP-status mapping below.
-            body = new byte[0];
+            body = EMPTY;
         }
 
         ConnectErrorBody parsed = body.length > 0
