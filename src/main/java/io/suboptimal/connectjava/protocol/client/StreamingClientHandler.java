@@ -19,6 +19,7 @@ import io.suboptimal.connectjava.api.ConnectClientResponseStart;
 import io.suboptimal.connectjava.api.ConnectResponseMeta;
 import io.suboptimal.connectjava.api.ConnectEndOfStream;
 import io.suboptimal.connectjava.api.ConnectError;
+import io.suboptimal.connectjava.api.ConnectErrorCode;
 import io.suboptimal.connectjava.api.ConnectErrorOrigin;
 import io.suboptimal.connectjava.api.ConnectPayload;
 import io.suboptimal.connectjava.codec.ConnectCodec;
@@ -202,7 +203,7 @@ class StreamingClientHandler extends ChannelDuplexHandler {
             // Transport rejection: no EndStreamResponse envelope, no trailers (E.1: origin=TRANSPORT).
             closed = true;
             ConnectError error = new ConnectError(
-                    ClientHandlerSupport.httpStatusToErrorCode(statusCode),
+                    ConnectErrorCode.fromHttpStatus(statusCode),
                     response.status().reasonPhrase())
                 .withOrigin(ConnectErrorOrigin.TRANSPORT);
             observer.onCallComplete(error);

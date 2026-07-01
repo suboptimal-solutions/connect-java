@@ -104,17 +104,6 @@ class ClientHandlerSupport {
     }
 
     /** Maps a non-200 HTTP status to the closest Connect error code (client-side table). */
-    static ConnectErrorCode httpStatusToErrorCode(int status) {
-        return switch (status) {
-            case 400 -> ConnectErrorCode.INTERNAL;
-            case 401 -> ConnectErrorCode.UNAUTHENTICATED;
-            case 403 -> ConnectErrorCode.PERMISSION_DENIED;
-            case 404 -> ConnectErrorCode.UNIMPLEMENTED;
-            case 429, 502, 503, 504 -> ConnectErrorCode.UNAVAILABLE;
-            default -> ConnectErrorCode.UNKNOWN;
-        };
-    }
-
     /** Returns the {@link ConnectErrorCode} whose wire name equals {@code wireName}, or {@code null}. */
     static @Nullable ConnectErrorCode findErrorCodeByWireName(String wireName) {
         for (ConnectErrorCode code : ConnectErrorCode.values()) {

@@ -153,7 +153,7 @@ class UnaryResponseClientHandler extends SimpleChannelInboundHandler<FullHttpRes
         // Recognised Connect-code in the JSON body => this is an accepted RPC error; otherwise transport rejection.
         boolean recognizedRpcError = code != null;
         if (code == null) {
-            code = ClientHandlerSupport.httpStatusToErrorCode(statusCode);
+            code = ConnectErrorCode.fromHttpStatus(statusCode);
         }
 
         String message = (parsed != null && parsed.message() != null)
