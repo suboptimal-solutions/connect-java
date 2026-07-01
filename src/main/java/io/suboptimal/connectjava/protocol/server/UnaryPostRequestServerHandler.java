@@ -13,12 +13,10 @@ import io.suboptimal.connectjava.codec.ConnectCodec;
 import io.suboptimal.connectjava.codec.ConnectCodecRegistry;
 import io.suboptimal.connectjava.compression.ConnectCompression;
 import io.suboptimal.connectjava.compression.ConnectCompressionRegistry;
-import io.suboptimal.connectjava.compression.ConnectIdentityCompression;
 import io.suboptimal.connectjava.model.ConnectMethodDefinition;
 import io.suboptimal.connectjava.protocol.ConnectCompressionNegotiation;
 import io.suboptimal.connectjava.protocol.ConnectMediaType;
 import io.suboptimal.connectjava.protocol.ConnectProtocolVersion;
-import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 
@@ -70,7 +68,8 @@ class UnaryPostRequestServerHandler extends SimpleChannelInboundHandler<FullHttp
 
         String requestCompressionName = ConnectCompressionNegotiation.compressionNameFor(
             request.headers().get(HttpHeaderNames.CONTENT_ENCODING));
-        ConnectCompression requestCompression = requestEncoding(requestCompressionName);
+        ConnectCompression requestCompression =
+            ConnectCompressionNegotiation.resolveOrNull(compressionRegistry, requestCompressionName);
         if (requestCompression == null) {
             var error = ConnectError.unimplemented(
                 "Unsupported content-encoding: " + requestCompressionName
@@ -139,10 +138,6 @@ class UnaryPostRequestServerHandler extends SimpleChannelInboundHandler<FullHttp
                     observer.onCallComplete(error);
                 }
             });
-    }
-
-    private @Nullable ConnectCompression requestEncoding(@Nullable String encodingName) {
-        return encodingName == null ? ConnectIdentityCompression.INSTANCE : compressionRegistry.resolve(encodingName);
     }
 
 }

@@ -6,7 +6,6 @@ import io.netty.handler.codec.http.HttpHeaders;
 import io.suboptimal.connectjava.api.ConnectErrorCode;
 import io.suboptimal.connectjava.codec.ConnectCodec;
 import io.suboptimal.connectjava.compression.ConnectCompression;
-import io.suboptimal.connectjava.compression.ConnectIdentityCompression;
 import io.suboptimal.connectjava.protocol.ConnectCompressionNegotiation;
 import io.suboptimal.connectjava.protocol.ConnectProtocolHttpHeaders;
 import org.jspecify.annotations.Nullable;
@@ -69,17 +68,9 @@ class ClientHandlerSupport {
                                                     Map<String, List<String>> requestHeaders)
     {
         List<String> values = requestHeaders.get(HttpHeaderNames.CONTENT_ENCODING.toString());
-        if (values == null || values.isEmpty()) {
-            return ConnectIdentityCompression.INSTANCE;
-        }
-
-        String name = ConnectCompressionNegotiation.compressionNameFor(values.getFirst());
-        if (name == null) {
-            return ConnectIdentityCompression.INSTANCE;
-        }
-
-        ConnectCompression compression = config.compressionRegistry().resolve(name);
-        return compression != null ? compression : ConnectIdentityCompression.INSTANCE;
+        String headerValue = (values == null || values.isEmpty()) ? null : values.getFirst();
+        String name = ConnectCompressionNegotiation.compressionNameFor(headerValue);
+        return ConnectCompressionNegotiation.resolveOrIdentity(config.compressionRegistry(), name);
     }
 
     static void copyUserHeadersForUnaryCall(Map<String, List<String>> source, HttpHeaders target) {

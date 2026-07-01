@@ -31,6 +31,36 @@ public final class ConnectCompressionNegotiation {
         return String.join(",", registry.supportedNames());
     }
 
+    /**
+     * Resolves a request compression from a parsed encoding {@code name} using server semantics:
+     * an absent name (no encoding declared) maps to identity, while a present-but-unsupported name
+     * yields {@code null} so the caller can reject the request per the Connect spec.
+     *
+     * <p>{@code name} is expected to already be normalized via {@link #compressionNameFor}.
+     */
+    public static @Nullable ConnectCompression resolveOrNull(
+        ConnectCompressionRegistry registry, @Nullable String name)
+    {
+        if (name == null) {
+            return ConnectIdentityCompression.INSTANCE;
+        }
+        return registry.resolve(name);
+    }
+
+    /**
+     * Resolves a request compression from a parsed encoding {@code name} using client semantics:
+     * both an absent name and an unsupported one fall back to identity. The client chose its own
+     * request encoding, so an unrecognized name is treated as no compression rather than an error.
+     *
+     * <p>{@code name} is expected to already be normalized via {@link #compressionNameFor}.
+     */
+    public static ConnectCompression resolveOrIdentity(
+        ConnectCompressionRegistry registry, @Nullable String name)
+    {
+        ConnectCompression resolved = resolveOrNull(registry, name);
+        return resolved != null ? resolved : ConnectIdentityCompression.INSTANCE;
+    }
+
     public static ConnectCompression selectResponseEncoding(
         ConnectCompression requestEncoding, @Nullable String responseEncoding, ConnectCompressionRegistry registry)
     {

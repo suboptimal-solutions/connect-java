@@ -122,7 +122,8 @@ class StreamingServerHandler extends ChannelDuplexHandler {
 
         String requestEncodingName = ConnectCompressionNegotiation.compressionNameFor(
             request.headers().get("connect-content-encoding"));
-        ConnectCompression selectedRequestEncoding = requestEncoding(requestEncodingName);
+        ConnectCompression selectedRequestEncoding =
+            ConnectCompressionNegotiation.resolveOrNull(compressionRegistry, requestEncodingName);
         if (selectedRequestEncoding == null) {
             String message = "Unsupported connect-content-encoding: " + requestEncodingName
                 + "; supported: " + ConnectCompressionNegotiation.formatSupportedEncodings(compressionRegistry);
@@ -349,10 +350,6 @@ class StreamingServerHandler extends ChannelDuplexHandler {
             ((ResponseHeadersBuilder) exchange.responseHeadersBuilder()).applyTo(response.headers());
         }
         ctx.write(response);
-    }
-
-    private @Nullable ConnectCompression requestEncoding(@Nullable String encodingName) {
-        return encodingName == null ? ConnectIdentityCompression.INSTANCE : compressionRegistry.resolve(encodingName);
     }
 
     private void writeStreamingError(ChannelHandlerContext ctx, ConnectError error) {

@@ -16,7 +16,6 @@ import io.suboptimal.connectjava.codec.ConnectCodec;
 import io.suboptimal.connectjava.codec.ConnectCodecRegistry;
 import io.suboptimal.connectjava.compression.ConnectCompression;
 import io.suboptimal.connectjava.compression.ConnectCompressionRegistry;
-import io.suboptimal.connectjava.compression.ConnectIdentityCompression;
 import io.suboptimal.connectjava.protocol.ConnectCompressionNegotiation;
 import io.suboptimal.connectjava.protocol.ConnectMediaType;
 import io.suboptimal.connectjava.protocol.ConnectProtocolVersion;
@@ -96,7 +95,8 @@ class UnaryGetRequestServerHandler extends SimpleChannelInboundHandler<FullHttpR
         }
 
         String compressionName = firstQueryValue(query, "compression");
-        ConnectCompression requestEncoding = requestEncoding(compressionName);
+        ConnectCompression requestEncoding = ConnectCompressionNegotiation.resolveOrNull(
+            compressionRegistry, ConnectCompressionNegotiation.compressionNameFor(compressionName));
         if (requestEncoding == null) {
             var error = ConnectError.unimplemented(
                 "Unsupported compression: " + compressionName
@@ -201,12 +201,6 @@ class UnaryGetRequestServerHandler extends SimpleChannelInboundHandler<FullHttpR
         return codec;
     }
 
-    private @Nullable ConnectCompression requestEncoding(@Nullable String compressionName) {
-        if (compressionName == null || compressionName.isEmpty()) {
-            return ConnectIdentityCompression.INSTANCE;
-        }
-        return compressionRegistry.resolve(compressionName);
-    }
 
     private static ByteBuf messageBytes(QueryStringDecoder query) {
         String message = firstQueryValue(query, "message");
