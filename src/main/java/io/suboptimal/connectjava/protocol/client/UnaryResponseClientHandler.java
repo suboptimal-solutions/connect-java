@@ -18,6 +18,7 @@ import io.suboptimal.connectjava.codec.ConnectCodec;
 import io.suboptimal.connectjava.compression.ConnectCompression;
 import io.suboptimal.connectjava.compression.ConnectIdentityCompression;
 import io.suboptimal.connectjava.protocol.ConnectCompressionNegotiation;
+import io.suboptimal.connectjava.protocol.ConnectMediaType;
 
 import java.io.IOException;
 import java.util.LinkedHashMap;
@@ -59,7 +60,7 @@ class UnaryResponseClientHandler extends SimpleChannelInboundHandler<FullHttpRes
             return;
         }
 
-        String codecName = ClientHandlerSupport.codecNameForContentType(response.headers().get(HttpHeaderNames.CONTENT_TYPE));
+        String codecName = ConnectMediaType.codecNameFor(response);
         ConnectCodec codec = codecName != null ? config.codecRegistry().byName(codecName) : null;
         if (codec == null) {
             ConnectError error = ConnectError.unknown("Unsupported or missing Content-Type in response");

@@ -44,23 +44,6 @@ class ClientHandlerSupport {
 
     private ClientHandlerSupport() {}
 
-    /** Maps a {@code Content-Type} value to a codec name, or {@code null} if unrecognized. */
-    @Nullable
-    static String codecNameForContentType(@Nullable String contentType) {
-        if (contentType == null) {
-            return null;
-        }
-        int semicolonIdx = contentType.indexOf(';');
-        String mimeType = semicolonIdx >= 0
-            ? contentType.substring(0, semicolonIdx).trim()
-            : contentType.trim();
-        return switch (mimeType.toLowerCase(Locale.ROOT)) {
-            case "application/proto", "application/connect+proto" -> "proto";
-            case "application/json", "application/connect+json" -> "json";
-            default -> null;
-        };
-    }
-
     /**
      * Selects the request codec by explicit name, falling back to the registry's preferred codec
      * when {@code codecName} is {@code null} or not registered.

@@ -1,6 +1,6 @@
 package io.suboptimal.connectjava.protocol;
 
-import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.HttpMessage;
 import io.netty.handler.codec.http.HttpUtil;
 import org.jetbrains.annotations.ApiStatus;
 import org.jspecify.annotations.Nullable;
@@ -12,8 +12,8 @@ public final class ConnectMediaType {
 
     private ConnectMediaType() {}
 
-    public static @Nullable String codecNameFor(HttpRequest request) {
-        CharSequence mimeTypeRaw = HttpUtil.getMimeType(request);
+    public static @Nullable String codecNameFor(HttpMessage message) {
+        CharSequence mimeTypeRaw = HttpUtil.getMimeType(message);
         String mimeType = mimeTypeRaw == null ? "" : mimeTypeRaw.toString();
 
         return switch (mimeType.toLowerCase(Locale.ROOT)) {

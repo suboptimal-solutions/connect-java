@@ -210,8 +210,7 @@ class StreamingClientHandler extends ChannelDuplexHandler {
             return;
         }
 
-        String respCodecName = ClientHandlerSupport.codecNameForContentType(
-            response.headers().get(HttpHeaderNames.CONTENT_TYPE));
+        String respCodecName = ConnectMediaType.codecNameFor(response);
         ConnectCodec respCodec = respCodecName != null
                 ? config.codecRegistry().byName(respCodecName)
                 : null;
