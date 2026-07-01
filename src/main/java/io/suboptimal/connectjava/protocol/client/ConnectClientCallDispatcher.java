@@ -80,6 +80,11 @@ class ConnectClientCallDispatcher extends ChannelOutboundHandlerAdapter {
                     return;
                 }
 
+                // Install the per-call handlers for this method type. This dispatcher is the
+                // tail-most Connect handler, so addBefore(CALL_DISPATCHER, …) inserts each handler
+                // on the head side — between the HTTP codec and this dispatcher — where it sees the
+                // outbound request on its way out and (for unary) the inbound response on its way in.
+                // See ConnectClientPipeline for the full layout.
                 ConnectMethodType type = effectiveCallStart.methodDefinition().type();
                 switch (type) {
                     case UNARY -> {
