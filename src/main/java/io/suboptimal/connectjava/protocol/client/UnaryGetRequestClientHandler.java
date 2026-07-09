@@ -9,7 +9,6 @@ import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http.DefaultFullHttpRequest;
 import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.HttpHeaderNames;
-import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.util.ReferenceCountUtil;
@@ -108,6 +107,11 @@ class UnaryGetRequestClientHandler extends ChannelOutboundHandlerAdapter {
 
                 FullHttpRequest request = new DefaultFullHttpRequest(
                     HttpVersion.HTTP_1_1, HttpMethod.GET, uriBuilder.toString(), Unpooled.EMPTY_BUFFER);
+
+                String authority = ClientHandlerSupport.resolveAuthority(callStart, ctx);
+                if (authority != null) {
+                    request.headers().set(HttpHeaderNames.HOST, authority);
+                }
 
                 if (callStart.timeoutMs() != null) {
                     request.headers().set(ConnectProtocolHttpHeaders.CONNECT_TIMEOUT_MS, callStart.timeoutMs());

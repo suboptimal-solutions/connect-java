@@ -179,6 +179,53 @@ class UnaryPostRequestClientHandlerTest {
     }
 
     @Test
+    void setsHostHeaderFromAuthority() {
+        var observer = new ClientTestSupport.RecordingObserver();
+        ConnectClientCallStart cs = new ConnectClientCallStart(
+            SERVICE, METHOD, Map.of(), false, "proto", null, "example.test:8080");
+        install(observer, cs);
+
+        channel.writeOutbound(cs);
+        channel.writeOutbound(new ConnectPayload(REQUEST));
+        channel.writeOutbound(ConnectEndOfStream.INSTANCE);
+
+        FullHttpRequest request = channel.readOutbound();
+        assertThat(request.headers().get(HttpHeaderNames.HOST)).isEqualTo("example.test:8080");
+        request.release();
+    }
+
+    @Test
+    void userSuppliedHostHeaderIsOverriddenByAuthority() {
+        var observer = new ClientTestSupport.RecordingObserver();
+        ConnectClientCallStart cs = new ConnectClientCallStart(
+            SERVICE, METHOD, Map.of("host", List.of("evil.test")), false, "proto", null, "good.test");
+        install(observer, cs);
+
+        channel.writeOutbound(cs);
+        channel.writeOutbound(new ConnectPayload(REQUEST));
+        channel.writeOutbound(ConnectEndOfStream.INSTANCE);
+
+        FullHttpRequest request = channel.readOutbound();
+        assertThat(request.headers().getAll(HttpHeaderNames.HOST)).containsExactly("good.test");
+        request.release();
+    }
+
+    @Test
+    void omitsHostHeaderWhenNoAuthorityAndRemoteUnavailable() {
+        var observer = new ClientTestSupport.RecordingObserver();
+        ConnectClientCallStart cs = callStart(Map.of());
+        install(observer, cs);
+
+        channel.writeOutbound(cs);
+        channel.writeOutbound(new ConnectPayload(REQUEST));
+        channel.writeOutbound(ConnectEndOfStream.INSTANCE);
+
+        FullHttpRequest request = channel.readOutbound();
+        assertThat(request.headers().contains(HttpHeaderNames.HOST)).isFalse();
+        request.release();
+    }
+
+    @Test
     void copiesUserHeadersToOutboundRequest() {
         var observer = new ClientTestSupport.RecordingObserver();
         ConnectClientCallStart cs = callStart(Map.of("x-custom", List.of("v1", "v2")));

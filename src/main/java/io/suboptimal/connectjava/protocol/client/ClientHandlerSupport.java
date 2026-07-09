@@ -1,8 +1,10 @@
 package io.suboptimal.connectjava.protocol.client;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaders;
+import io.suboptimal.connectjava.api.ConnectClientCallStart;
 import io.suboptimal.connectjava.api.ConnectErrorCode;
 import io.suboptimal.connectjava.codec.ConnectCodec;
 import io.suboptimal.connectjava.compression.ConnectCompression;
@@ -10,6 +12,8 @@ import io.suboptimal.connectjava.protocol.ConnectCompressionNegotiation;
 import io.suboptimal.connectjava.protocol.ConnectProtocolHttpHeaders;
 import org.jspecify.annotations.Nullable;
 
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -25,6 +29,7 @@ import java.util.stream.Stream;
 class ClientHandlerSupport {
     /** Protocol-managed headers for unary requests; user values for these are ignored. */
     private static final Set<String> UNARY_RESERVED_HEADERS = Set.of(
+            HttpHeaderNames.HOST.toString(),
             HttpHeaderNames.CONTENT_TYPE.toString(),
             HttpHeaderNames.CONTENT_LENGTH.toString(),
             ConnectProtocolHttpHeaders.CONNECT_PROTOCOL_VERSION.toString(),
@@ -33,6 +38,7 @@ class ClientHandlerSupport {
 
     /** Protocol-managed headers for streaming requests; user values for these are ignored. */
     private static final Set<String> STREAMING_RESERVED_HEADERS = Set.of(
+            HttpHeaderNames.HOST.toString(),
             HttpHeaderNames.CONTENT_TYPE.toString(),
             HttpHeaderNames.CONTENT_LENGTH.toString(),
             ConnectProtocolHttpHeaders.CONNECT_PROTOCOL_VERSION.toString(),
@@ -42,6 +48,30 @@ class ClientHandlerSupport {
             ConnectProtocolHttpHeaders.CONNECT_ACCEPT_ENCODING.toString());
 
     private ClientHandlerSupport() {}
+
+    /**
+     * Resolves the HTTP/1.1 {@code Host} authority for an outgoing request. Prefers the logical
+     * {@code authority} carried on the call (e.g. propagated by a higher layer such as the gRPC
+     * bridge); otherwise derives {@code host} or {@code host:port} from the channel's remote
+     * address. The default HTTP port (80) is omitted. Returns {@code null} when no authority can be
+     * determined (e.g. a channel with no {@link InetSocketAddress} remote), in which case the caller
+     * should not set the header.
+     */
+    static @Nullable String resolveAuthority(ConnectClientCallStart callStart, ChannelHandlerContext ctx) {
+        return resolveAuthority(callStart.authority(), ctx.channel().remoteAddress());
+    }
+
+    static @Nullable String resolveAuthority(@Nullable String authority, @Nullable SocketAddress remote) {
+        if (authority != null && !authority.isBlank()) {
+            return authority;
+        }
+        if (remote instanceof InetSocketAddress addr) {
+            String host = addr.getHostString();
+            int port = addr.getPort();
+            return (port > 0 && port != 80) ? host + ":" + port : host;
+        }
+        return null;
+    }
 
     /**
      * Selects the request codec by explicit name, falling back to the registry's preferred codec

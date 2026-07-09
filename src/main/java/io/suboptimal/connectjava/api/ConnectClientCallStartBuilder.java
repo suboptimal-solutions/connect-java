@@ -27,6 +27,7 @@ public final class ConnectClientCallStartBuilder {
     private boolean preferGet;
     private @Nullable String codecName;
     private @Nullable Long timeoutMs;
+    private @Nullable String authority;
 
     public ConnectClientCallStartBuilder(ConnectClientCallStart start) {
         Objects.requireNonNull(start);
@@ -38,6 +39,7 @@ public final class ConnectClientCallStartBuilder {
         this.preferGet = start.preferGet();
         this.codecName = start.codecName();
         this.timeoutMs = start.timeoutMs();
+        this.authority = start.authority();
     }
 
     public ConnectServiceDefinition serviceDefinition() { return serviceDefinition; }
@@ -58,6 +60,12 @@ public final class ConnectClientCallStartBuilder {
     public @Nullable Long timeoutMs() { return timeoutMs; }
     public ConnectClientCallStartBuilder timeoutMs(@Nullable Long timeoutMs) {
         this.timeoutMs = timeoutMs;
+        return this;
+    }
+
+    public @Nullable String authority() { return authority; }
+    public ConnectClientCallStartBuilder authority(@Nullable String authority) {
+        this.authority = authority;
         return this;
     }
 
@@ -94,6 +102,6 @@ public final class ConnectClientCallStartBuilder {
     /** Freezes the current state into an immutable {@link ConnectClientCallStart}. */
     public ConnectClientCallStart build() {
         return new ConnectClientCallStart(
-            serviceDefinition, methodDefinition, requestHeaders, preferGet, codecName, timeoutMs);
+            serviceDefinition, methodDefinition, requestHeaders, preferGet, codecName, timeoutMs, authority);
     }
 }

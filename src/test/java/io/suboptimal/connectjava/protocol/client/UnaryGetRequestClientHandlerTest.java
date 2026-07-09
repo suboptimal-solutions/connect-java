@@ -2,6 +2,7 @@ package io.suboptimal.connectjava.protocol.client;
 
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.codec.http.FullHttpRequest;
+import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.QueryStringDecoder;
 import io.suboptimal.connectjava.api.ConnectClientCallStart;
@@ -85,6 +86,37 @@ class UnaryGetRequestClientHandlerTest {
 
         assertThat(channel.pipeline().get(ConnectClientPipeline.UNARY_RESPONSE_HANDLER)).isNotNull();
         assertThat(observer.events).containsExactly("onRequestPayload", "onRequestFinished");
+    }
+
+    @Test
+    void setsHostHeaderFromAuthority() {
+        var observer = new ClientTestSupport.RecordingObserver();
+        ConnectClientCallStart cs = new ConnectClientCallStart(
+            SERVICE, METHOD, Map.of(), true, "proto", null, "example.test:8080");
+        install(observer, cs);
+
+        channel.writeOutbound(cs);
+        channel.writeOutbound(new ConnectPayload(REQUEST));
+        channel.writeOutbound(ConnectEndOfStream.INSTANCE);
+
+        FullHttpRequest request = channel.readOutbound();
+        assertThat(request.headers().get(HttpHeaderNames.HOST)).isEqualTo("example.test:8080");
+        request.release();
+    }
+
+    @Test
+    void omitsHostHeaderWhenNoAuthorityAndRemoteUnavailable() {
+        var observer = new ClientTestSupport.RecordingObserver();
+        ConnectClientCallStart cs = callStart(Map.of());
+        install(observer, cs);
+
+        channel.writeOutbound(cs);
+        channel.writeOutbound(new ConnectPayload(REQUEST));
+        channel.writeOutbound(ConnectEndOfStream.INSTANCE);
+
+        FullHttpRequest request = channel.readOutbound();
+        assertThat(request.headers().contains(HttpHeaderNames.HOST)).isFalse();
+        request.release();
     }
 
     @Test

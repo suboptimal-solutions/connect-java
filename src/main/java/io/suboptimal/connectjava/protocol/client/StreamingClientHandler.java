@@ -89,6 +89,11 @@ class StreamingClientHandler extends ChannelDuplexHandler {
                     .set(HttpHeaderNames.TRANSFER_ENCODING, HttpHeaderValues.CHUNKED)
                     .set(ConnectProtocolHttpHeaders.CONNECT_PROTOCOL_VERSION, ConnectProtocolVersion.HEADER_VERSION);
 
+                String authority = ClientHandlerSupport.resolveAuthority(callStart, ctx);
+                if (authority != null) {
+                    request.headers().set(HttpHeaderNames.HOST, authority);
+                }
+
                 if (callStart.timeoutMs() != null) {
                     request.headers().set(ConnectProtocolHttpHeaders.CONNECT_TIMEOUT_MS, callStart.timeoutMs());
                 }

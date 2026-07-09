@@ -116,6 +116,27 @@ class StreamingClientHandlerTest {
     }
 
     @Test
+    void setsHostHeaderFromAuthority() {
+        ConnectClientCallStart callStart = new ConnectClientCallStart(
+            SERVICE, SERVER_STREAMING, Map.of(), false, "proto", null, "example.test:8080");
+        channel.pipeline().addLast(
+            new StreamingClientHandler(callStart, ClientTestSupport.config(), observer));
+        channel.writeOutbound(callStart);
+
+        HttpRequest request = channel.readOutbound();
+        assertThat(request.headers().get(HttpHeaderNames.HOST)).isEqualTo("example.test:8080");
+    }
+
+    @Test
+    void omitsHostHeaderWhenNoAuthorityAndRemoteUnavailable() {
+        install(SERVER_STREAMING);
+        start(SERVER_STREAMING);
+
+        HttpRequest request = channel.readOutbound();
+        assertThat(request.headers().contains(HttpHeaderNames.HOST)).isFalse();
+    }
+
+    @Test
     void encodesPayloadAsEnvelopeFrame() throws IOException {
         install(SERVER_STREAMING);
         start(SERVER_STREAMING);
