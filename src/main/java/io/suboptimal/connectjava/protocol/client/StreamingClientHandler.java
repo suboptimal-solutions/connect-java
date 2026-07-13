@@ -50,6 +50,10 @@ class StreamingClientHandler extends ChannelDuplexHandler {
     private ConnectEnvelope. @Nullable Decoder decoder;
     private int requestPayloadsSent;
     private int responsePayloadsReceived;
+    // Client-streaming carries a single response: buffer it and surface it only once end-of-stream
+    // confirms exactly one message arrived, so a protocol-violating extra message yields zero
+    // surfaced payloads instead of one. Unused for server-streaming (which delivers eagerly).
+    private @Nullable Object bufferedClientStreamResponse;
     private boolean endStreamReceived;
     private boolean closed;
 
@@ -220,7 +224,7 @@ class StreamingClientHandler extends ChannelDuplexHandler {
         int statusCode = response.status().code();
 
         // ТП.1: as soon as HTTP response metadata arrives, fire ResponseStart before any checks.
-        Map<String, List<String>> headersMap = ClientHandlerSupport.toHeaderMap(response.headers());
+        Map<String, List<String>> headersMap = ClientHandlerSupport.toApplicationHeaderMap(response.headers());
         ConnectResponseMeta responseMeta = new ConnectResponseMeta(statusCode, headersMap);
         observer.onResponseHeaders(responseMeta);
         ctx.fireChannelRead(new ConnectClientResponseStart(
@@ -330,6 +334,13 @@ class StreamingClientHandler extends ChannelDuplexHandler {
             decompressed.release();
         }
 
+        if (type == ConnectMethodType.CLIENT_STREAMING) {
+            // Defer delivery until end-of-stream validates the single-message cardinality.
+            bufferedClientStreamResponse = decoded;
+            responsePayloadsReceived++;
+            return;
+        }
+
         observer.onResponsePayload(decoded);
         responsePayloadsReceived++;
         ctx.fireChannelRead(new ConnectPayload(decoded));
@@ -361,11 +372,17 @@ class StreamingClientHandler extends ChannelDuplexHandler {
         if (error != null) {
             fail(ctx, trailers, error);
         } else {
-            if (callStart.methodDefinition().type() == ConnectMethodType.CLIENT_STREAMING
-                    && responsePayloadsReceived == 0) {
-                fail(ctx, trailers, ConnectError.unimplemented(
-                        "Client-streaming method received no response message"));
-                return;
+            if (callStart.methodDefinition().type() == ConnectMethodType.CLIENT_STREAMING) {
+                if (responsePayloadsReceived == 0) {
+                    fail(ctx, trailers, ConnectError.unimplemented(
+                            "Client-streaming method received no response message"));
+                    return;
+                }
+                // Exactly one message arrived and the stream ended cleanly: surface it now.
+                assert bufferedClientStreamResponse != null;
+                observer.onResponsePayload(bufferedClientStreamResponse);
+                ctx.fireChannelRead(new ConnectPayload(bufferedClientStreamResponse));
+                bufferedClientStreamResponse = null;
             }
 
             // Success: end-of-stream precedes completion, and carries no error.

@@ -206,8 +206,8 @@ class UnaryResponseClientHandler extends SimpleChannelInboundHandler<FullHttpRes
     private static MetaContainer buildMeta(FullHttpResponse response) {
         int statusCode = response.status().code();
         Map<String, List<String>> all = new LinkedHashMap<>();
-        all.putAll(ClientHandlerSupport.toHeaderMap(response.headers()));
-        all.putAll(ClientHandlerSupport.toHeaderMap(response.trailingHeaders()));
+        all.putAll(ClientHandlerSupport.toApplicationHeaderMap(response.headers()));
+        all.putAll(ClientHandlerSupport.toApplicationHeaderMap(response.trailingHeaders()));
 
         Map<String, List<String>> headers = new LinkedHashMap<>();
         Map<String, List<String>> trailers = new LinkedHashMap<>();

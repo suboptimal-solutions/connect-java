@@ -383,6 +383,26 @@ class UnaryResponseClientHandlerTest {
         channel.finishAndReleaseAll();
     }
 
+    @Test
+    void stripsHopByHopHeadersFromResponseMeta() {
+        var observer = new ClientTestSupport.RecordingObserver();
+        EmbeddedChannel channel = newChannel(observer);
+
+        FullHttpResponse resp = response(200, ClientTestSupport.encode(proto, RESPONSE),
+            "application/proto", null);
+        resp.headers().set("Connection", "keep-alive");
+        resp.headers().set("Keep-Alive", "timeout=5");
+        resp.headers().set("x-custom", "v");
+        channel.writeInbound(resp);
+
+        ConnectClientResponseStart start = channel.readInbound();
+        Map<String, List<String>> headers = start.responseMeta().headers();
+        assertThat(headers).doesNotContainKeys("connection", "keep-alive");
+        assertThat(headers).containsKey("x-custom");
+
+        channel.finishAndReleaseAll();
+    }
+
     private EmbeddedChannel newChannelWithTimeout(ClientTestSupport.RecordingObserver observer, long timeoutMs) {
         EmbeddedChannel channel = new EmbeddedChannel();
         ConnectClientCallStart cs = new ConnectClientCallStart(SERVICE, METHOD, Map.of(), false, "proto", timeoutMs);

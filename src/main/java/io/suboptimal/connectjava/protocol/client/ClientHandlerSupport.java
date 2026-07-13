@@ -14,6 +14,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -122,18 +123,52 @@ class ClientHandlerSupport {
                 .forEach(e -> target.add(e.getKey(), e.getValue()));
     }
 
-    /** Converts Netty headers to a lower-cased name-to-values map. */
-    static Map<String, List<String>> toHeaderMap(HttpHeaders headers) {
+    /** Hop-by-hop response headers (RFC 7230 §6.1) that must not surface as application metadata. */
+    private static final Set<String> HOP_BY_HOP_HEADERS = Set.of(
+            HttpHeaderNames.CONNECTION.toString(),
+            HttpHeaderNames.KEEP_ALIVE.toString(),
+            HttpHeaderNames.TRANSFER_ENCODING.toString(),
+            HttpHeaderNames.TE.toString(),
+            HttpHeaderNames.TRAILER.toString(),
+            HttpHeaderNames.UPGRADE.toString(),
+            HttpHeaderNames.PROXY_AUTHENTICATE.toString(),
+            HttpHeaderNames.PROXY_AUTHORIZATION.toString());
+
+    /**
+     * Converts response headers to a lower-cased name-to-values map for surfacing as application
+     * metadata, dropping HTTP/1 hop-by-hop headers (RFC 7230 §6.1). The excluded set is the standard
+     * hop-by-hop headers plus any names listed in the {@code Connection} header's own value.
+     */
+    static Map<String, List<String>> toApplicationHeaderMap(HttpHeaders headers) {
+        Set<String> excluded = hopByHopHeaders(headers);
         return headers
                 .entries()
                 .stream()
+                .filter(e -> !excluded.contains(e.getKey().toLowerCase(Locale.ROOT)))
                 .collect(Collectors.toUnmodifiableMap(
                         e -> e.getKey().toLowerCase(Locale.ROOT),
                         e -> List.of(e.getValue()),
                         (l1,l2) -> Stream.concat(l1.stream(), l2.stream()).toList()));
     }
 
-    /** Maps a non-200 HTTP status to the closest Connect error code (client-side table). */
+    /** Standard hop-by-hop set, augmented with any header names listed in the {@code Connection} value. */
+    private static Set<String> hopByHopHeaders(HttpHeaders headers) {
+        List<String> connectionValues = headers.getAll(HttpHeaderNames.CONNECTION);
+        if (connectionValues.isEmpty()) {
+            return HOP_BY_HOP_HEADERS;
+        }
+        Set<String> excluded = new HashSet<>(HOP_BY_HOP_HEADERS);
+        for (String value : connectionValues) {
+            for (String token : value.split(",")) {
+                String name = token.trim().toLowerCase(Locale.ROOT);
+                if (!name.isEmpty()) {
+                    excluded.add(name);
+                }
+            }
+        }
+        return excluded;
+    }
+
     /** Returns the {@link ConnectErrorCode} whose wire name equals {@code wireName}, or {@code null}. */
     static @Nullable ConnectErrorCode findErrorCodeByWireName(String wireName) {
         for (ConnectErrorCode code : ConnectErrorCode.values()) {

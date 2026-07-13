@@ -251,15 +251,17 @@ class StreamingClientHandlerTest {
     // ---- inbound: client-streaming ----
 
     @Test
-    void clientStreamingRejectsSecondResponse() {
+    void clientStreamingRejectsSecondResponseWithoutSurfacingAny() {
         install(CLIENT_STREAMING);
         start(CLIENT_STREAMING);
         channel.readOutbound();
         channel.writeInbound(okStreamingResponse());
         channel.readInbound(); // exchange
 
+        // First response must be buffered, not surfaced yet (client-streaming has a single response).
         channel.writeInbound(dataFrame(StreamingResponse.newBuilder().setText("1").build()));
-        channel.readInbound(); // first payload
+        assertThat(channel.<Object>readInbound()).isNull();
+
         channel.writeInbound(dataFrame(StreamingResponse.newBuilder().setText("2").build()));
 
         Object inbound = channel.readInbound();
@@ -268,6 +270,38 @@ class StreamingClientHandlerTest {
         assertThat(eos.error()).isNotNull();
         assertThat(eos.error().code()).isEqualTo(ConnectErrorCode.UNIMPLEMENTED);
         assertThat(eos.error().message()).contains("more than one response message");
+
+        // The protocol violation surfaces zero payloads, not one.
+        assertThat(observer.events).doesNotContain("onResponsePayload");
+        assertThat(channel.<Object>readInbound()).isNull();
+    }
+
+    @Test
+    void clientStreamingSurfacesSingleResponseAtEndOfStream() {
+        install(CLIENT_STREAMING);
+        start(CLIENT_STREAMING);
+        channel.readOutbound();
+        channel.writeInbound(okStreamingResponse());
+        channel.readInbound(); // exchange
+
+        // The single response is buffered until end-of-stream confirms exactly one message.
+        channel.writeInbound(dataFrame(StreamingResponse.newBuilder().setText("only").build()));
+        assertThat(channel.<Object>readInbound()).isNull();
+
+        channel.writeInbound(endStreamFrame("{}"));
+
+        Object payload = channel.readInbound();
+        assertThat(payload).isInstanceOf(ConnectPayload.class);
+        assertThat(((ConnectPayload) payload).data())
+            .isEqualTo(StreamingResponse.newBuilder().setText("only").build());
+
+        Object eos = channel.readInbound();
+        assertThat(eos).isInstanceOf(ConnectEndOfStream.class);
+        assertThat(((ConnectEndOfStream) eos).error()).isNull();
+
+        assertThat(observer.events)
+            .containsExactly("onResponseHeaders", "onResponsePayload", "onCallComplete");
+        assertThat(observer.completeError).isNull();
     }
 
     // ---- inbound: errors ----
