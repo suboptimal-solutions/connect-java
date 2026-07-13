@@ -1,5 +1,7 @@
 package io.suboptimal.connectjava.protocol;
 
+import org.jetbrains.annotations.ApiStatus;
+
 /**
  * Singleton signal used when a Connect response handler receives outbound RPC messages after
  * the call has already reached a terminal state. Applies to both unary and streaming calls.
@@ -12,7 +14,8 @@ package io.suboptimal.connectjava.protocol;
  * {@link io.netty.channel.ChannelPromise} for late writes that are ignored after the call has
  * terminated.
  */
-public class ConnectCallTerminatedException extends RuntimeException {
+@ApiStatus.Internal
+public final class ConnectCallTerminatedException extends RuntimeException {
     public static final ConnectCallTerminatedException INSTANCE = new ConnectCallTerminatedException();
 
     public ConnectCallTerminatedException() {

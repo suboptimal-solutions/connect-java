@@ -2,9 +2,10 @@ package io.suboptimal.connectjava.api;
 
 import io.suboptimal.connectjava.model.ConnectMethodDefinition;
 import io.suboptimal.connectjava.model.ConnectServiceDefinition;
+import io.suboptimal.connectjava.protocol.server.ConnectServerInterceptor;
 
 /**
- * Immutable view of a Connect RPC call passed to each {@link io.suboptimal.connectjava.protocol.ConnectInterceptor}.
+ * Immutable view of a Connect RPC call passed to each {@link ConnectServerInterceptor}.
  *
  * <p>{@link #responseHeadersBuilder()} accepts mutations until the first response payload (or the
  * terminal response for unary calls) is written; after that point any mutation throws

@@ -1,9 +1,9 @@
 package io.suboptimal.connectjava.api;
 
-import io.suboptimal.connectjava.protocol.ConnectCallObserver;
+import io.suboptimal.connectjava.protocol.server.ConnectServerCallObserver;
 
 /**
- * Mutable Connect response trailers collected by {@link ConnectCallObserver}s.
+ * Mutable Connect response trailers collected by {@link ConnectServerCallObserver}s.
  *
  * <p>For unary RPCs, trailers are serialized as {@code Trailer-*} response headers. For
  * streaming RPCs, trailers are serialized as the {@code metadata} object in the

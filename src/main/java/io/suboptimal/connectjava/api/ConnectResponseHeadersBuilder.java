@@ -1,9 +1,9 @@
 package io.suboptimal.connectjava.api;
 
-import io.suboptimal.connectjava.protocol.ConnectCallObserver;
+import io.suboptimal.connectjava.protocol.server.ConnectServerCallObserver;
 
 /**
- * Mutable Connect response headers collected by {@link ConnectCallObserver}s.
+ * Mutable Connect response headers collected by {@link ConnectServerCallObserver}s.
  *
  * <p>Mutations are applied to the wire response after all header observers run. Operation
  * order is preserved, including the difference between {@link #set(CharSequence, CharSequence)}

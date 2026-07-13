@@ -5,11 +5,25 @@ import java.util.List;
 /**
  * Connect-native error.
  */
-public record ConnectError(ConnectErrorCode code, String message, List<ConnectErrorDetail> details)
+public record ConnectError(ConnectErrorCode code,
+                           String message,
+                           List<ConnectErrorDetail> details,
+                           ConnectErrorOrigin origin)
     implements ConnectMessage
 {
+    /** Defaults {@code origin} to {@link ConnectErrorOrigin#RPC}. */
+    public ConnectError(ConnectErrorCode code, String message, List<ConnectErrorDetail> details) {
+        this(code, message, details, ConnectErrorOrigin.RPC);
+    }
+
+    /** Defaults {@code details} to empty and {@code origin} to {@link ConnectErrorOrigin#RPC}. */
     public ConnectError(ConnectErrorCode code, String message) {
-        this(code, message, List.of());
+        this(code, message, List.of(), ConnectErrorOrigin.RPC);
+    }
+
+    /** Returns a copy of this error tagged with {@code origin}; all other fields unchanged. */
+    public ConnectError withOrigin(ConnectErrorOrigin origin) {
+        return new ConnectError(code, message, details, origin);
     }
 
     public static ConnectError canceled(String message) {

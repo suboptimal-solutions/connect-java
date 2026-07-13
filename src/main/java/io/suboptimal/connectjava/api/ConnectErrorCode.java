@@ -42,5 +42,26 @@ public enum ConnectErrorCode {
     public HttpResponseStatus httpStatus() {
         return httpStatus;
     }
+
+    /**
+     * Infers a {@code ConnectErrorCode} from a bare HTTP status, for responses that carry no
+     * valid Connect error body. This is the spec-defined HTTP-to-code inference from the Connect
+     * protocol (see {@code protocol.md}, "HTTP to Error Code"), used by the client as a fallback.
+     *
+     * <p>This is deliberately <em>not</em> the inverse of {@link #httpStatus()}: several codes map
+     * to the same status, so the mappings are asymmetric. For example {@code INVALID_ARGUMENT}
+     * maps to {@code 400}, yet {@code fromHttpStatus(400)} returns {@link #INTERNAL}. Any status
+     * not listed by the spec falls back to {@link #UNKNOWN}.
+     */
+    public static ConnectErrorCode fromHttpStatus(int status) {
+        return switch (status) {
+            case 400 -> INTERNAL;
+            case 401 -> UNAUTHENTICATED;
+            case 403 -> PERMISSION_DENIED;
+            case 404 -> UNIMPLEMENTED;
+            case 429, 502, 503, 504 -> UNAVAILABLE;
+            default -> UNKNOWN;
+        };
+    }
 }
 
