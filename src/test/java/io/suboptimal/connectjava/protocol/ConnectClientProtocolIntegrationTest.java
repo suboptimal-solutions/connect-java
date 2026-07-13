@@ -173,11 +173,66 @@ class ConnectClientProtocolIntegrationTest {
         assertThat(result.error.code()).isEqualTo(ConnectErrorCode.NOT_FOUND);
     }
 
+    @Test
+    void unaryPostDeadlineExceededWhenServerHangs() throws Exception {
+        CallResult result = call(UNARY_POST_SERVICE, UNARY_POST, false,
+            List.of(UnaryPostRequest.newBuilder().setText("HANG").build()), 150L);
+
+        assertThat(result.error).isNotNull();
+        assertThat(result.error.code()).isEqualTo(ConnectErrorCode.DEADLINE_EXCEEDED);
+        assertThat(result.payloads).isEmpty();
+    }
+
+    @Test
+    void unaryGetDeadlineExceededWhenServerHangs() throws Exception {
+        CallResult result = call(UNARY_GET_SERVICE, UNARY_GET, true,
+            List.of(UnaryGetRequest.newBuilder().setText("HANG").build()), 150L);
+
+        assertThat(result.error).isNotNull();
+        assertThat(result.error.code()).isEqualTo(ConnectErrorCode.DEADLINE_EXCEEDED);
+        assertThat(result.payloads).isEmpty();
+    }
+
+    @Test
+    void serverStreamingDeadlineExceededWhenServerHangs() throws Exception {
+        CallResult result = call(STREAMING_SERVICE, SERVER_STREAMING, false,
+            List.of(StreamingRequest.newBuilder().setText("HANG").build()), 150L);
+
+        assertThat(result.error).isNotNull();
+        assertThat(result.error.code()).isEqualTo(ConnectErrorCode.DEADLINE_EXCEEDED);
+        assertThat(result.payloads).isEmpty();
+    }
+
+    @Test
+    void clientStreamingDeadlineExceededWhenServerHangs() throws Exception {
+        CallResult result = call(STREAMING_SERVICE, CLIENT_STREAMING, false,
+            List.of(StreamingRequest.newBuilder().setText("HANG").build()), 150L);
+
+        assertThat(result.error).isNotNull();
+        assertThat(result.error.code()).isEqualTo(ConnectErrorCode.DEADLINE_EXCEEDED);
+        assertThat(result.payloads).isEmpty();
+    }
+
+    @Test
+    void deadlineDoesNotFireWhenServerRespondsInTime() throws Exception {
+        CallResult result = call(UNARY_POST_SERVICE, UNARY_POST, false,
+            List.of(UnaryPostRequest.newBuilder().setText("hi").build()), 5000L);
+
+        assertThat(result.error).isNull();
+        assertThat(result.payloads).hasSize(1);
+        assertThat(((UnaryPostResponse) result.payloads.getFirst()).getText()).isEqualTo("echo:hi");
+    }
+
     private CallResult call(ConnectServiceDefinition service, ConnectMethodDefinition method,
                             boolean preferGet, List<Object> requests) throws Exception {
+        return call(service, method, preferGet, requests, null);
+    }
+
+    private CallResult call(ConnectServiceDefinition service, ConnectMethodDefinition method,
+                            boolean preferGet, List<Object> requests, Long timeoutMs) throws Exception {
         CompletableFuture<CallResult> future = new CompletableFuture<>();
         ConnectClientCallStart callStart =
-            new ConnectClientCallStart(service, method, Map.of(), preferGet, "proto");
+            new ConnectClientCallStart(service, method, Map.of(), preferGet, "proto", timeoutMs);
 
         ConnectClientProtocolConfig clientConfig = ConnectClientProtocolConfig.builder(
             () -> new DriverHandler(callStart, requests, future),
@@ -263,6 +318,10 @@ class ConnectClientProtocolIntegrationTest {
         }
 
         private void respond(ChannelHandlerContext ctx) {
+            if (requestTexts.contains("HANG")) {
+                // Never respond, to exercise the client-side deadline timer.
+                return;
+            }
             if (requestTexts.contains("FAIL")) {
                 ctx.writeAndFlush(ConnectError.notFound("requested failure"));
                 return;

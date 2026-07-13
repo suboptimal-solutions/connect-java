@@ -31,6 +31,7 @@ class UnaryResponseClientHandler extends SimpleChannelInboundHandler<FullHttpRes
     private final ConnectClientCallStart callStart;
     private final ConnectClientProtocolConfig config;
     private final ConnectClientCallObserver observer;
+    private final ClientCallDeadline deadline = new ClientCallDeadline();
     private boolean closed;
 
     UnaryResponseClientHandler(ConnectClientCallStart callStart,
@@ -43,7 +44,39 @@ class UnaryResponseClientHandler extends SimpleChannelInboundHandler<FullHttpRes
     }
 
     @Override
+    public void handlerAdded(ChannelHandlerContext ctx) {
+        // Installed right after the request is written, so this is the client's local deadline start.
+        Long timeoutMs = callStart.timeoutMs();
+        if (timeoutMs != null) {
+            deadline.schedule(ctx, timeoutMs, () -> onDeadlineExpired(ctx));
+        }
+    }
+
+    private void onDeadlineExpired(ChannelHandlerContext ctx) {
+        if (closed) {
+            return;
+        }
+        fail(ctx, Map.of(), ConnectError.deadlineExceeded("Deadline exceeded"));
+        ctx.close();
+    }
+
+    /**
+     * Delivers the single terminal completion for a failed call: marks it closed, notifies the
+     * observer, and forwards an {@link ConnectEndOfStream} carrying {@code error}. Callers must
+     * guard on {@link #closed} first (the pipeline guarantees exactly one completion).
+     */
+    private void fail(ChannelHandlerContext ctx, Map<String, List<String>> trailers, ConnectError error) {
+        closed = true;
+        observer.onCallComplete(error);
+        ctx.fireChannelRead(new ConnectEndOfStream(trailers, error));
+    }
+
+    @Override
     protected void channelRead0(ChannelHandlerContext ctx, FullHttpResponse response) {
+        deadline.cancel();
+        if (closed) {
+            return;
+        }
         MetaContainer meta = buildMeta(response);
         int statusCode = meta.connectResponseMeta.statusCode();
 
@@ -56,9 +89,7 @@ class UnaryResponseClientHandler extends SimpleChannelInboundHandler<FullHttpRes
 
         if (statusCode != 200) {
             ConnectError error = parseErrorResponse(ctx, response, statusCode);
-            closed = true;
-            observer.onCallComplete(error);
-            ctx.fireChannelRead(new ConnectEndOfStream(meta.trailers(), error));
+            fail(ctx, meta.trailers(), error);
             return;
         }
 
@@ -66,18 +97,14 @@ class UnaryResponseClientHandler extends SimpleChannelInboundHandler<FullHttpRes
         ConnectCodec codec = codecName != null ? config.codecRegistry().byName(codecName) : null;
         if (codec == null) {
             ConnectError error = ConnectError.unknown("Unsupported or missing Content-Type in response");
-            closed = true;
-            observer.onCallComplete(error);
-            ctx.fireChannelRead(new ConnectEndOfStream(meta.trailers(), error));
+            fail(ctx, meta.trailers(), error);
             return;
         }
 
         String requestCodecName = callStart.codecName();
         if (requestCodecName != null && !requestCodecName.equals(codecName)) {
             ConnectError error = ConnectError.internal("Response codec '" + codecName + "' does not match request codec '" + requestCodecName + "'");
-            closed = true;
-            observer.onCallComplete(error);
-            ctx.fireChannelRead(new ConnectEndOfStream(meta.trailers(), error));
+            fail(ctx, meta.trailers(), error);
             return;
         }
 
@@ -89,9 +116,7 @@ class UnaryResponseClientHandler extends SimpleChannelInboundHandler<FullHttpRes
             decompressed = ConnectCompressionNegotiation.decompressMessage(ctx.alloc(), body, decompression);
         } catch (IOException e) {
             ConnectError error = ConnectError.internal("Decompression failed: " + e.getMessage());
-            closed = true;
-            observer.onCallComplete(error);
-            ctx.fireChannelRead(new ConnectEndOfStream(meta.trailers(), error));
+            fail(ctx, meta.trailers(), error);
             return;
         }
 
@@ -100,9 +125,7 @@ class UnaryResponseClientHandler extends SimpleChannelInboundHandler<FullHttpRes
             decoded = codec.decode(decompressed, callStart.methodDefinition().responseType());
         } catch (IOException e) {
             ConnectError error = ConnectError.internal("Deserialization failed: " + e.getMessage());
-            closed = true;
-            observer.onCallComplete(error);
-            ctx.fireChannelRead(new ConnectEndOfStream(meta.trailers(), error));
+            fail(ctx, meta.trailers(), error);
             return;
         } finally {
             decompressed.release();
@@ -117,13 +140,18 @@ class UnaryResponseClientHandler extends SimpleChannelInboundHandler<FullHttpRes
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) {
+        deadline.cancel();
         if (!closed) {
-            closed = true;
-            ConnectError error = ConnectError.canceled("Connection reset");
-            observer.onCallComplete(error);
-            ctx.fireChannelRead(new ConnectEndOfStream(Map.of(), error));
+            fail(ctx, Map.of(), ConnectError.canceled("Connection reset"));
         }
         ctx.fireChannelInactive();
+    }
+
+    @Override
+    public void handlerRemoved(ChannelHandlerContext ctx) {
+        // Guards against a leaked timer when the handler is torn down (e.g. removed at the next call
+        // on a keep-alive channel) without a channelInactive.
+        deadline.cancel();
     }
 
     private ConnectError parseErrorResponse(ChannelHandlerContext ctx, FullHttpResponse response, int statusCode) {

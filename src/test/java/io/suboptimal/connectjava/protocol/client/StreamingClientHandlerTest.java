@@ -36,6 +36,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -738,5 +739,61 @@ class StreamingClientHandlerTest {
 
         HttpRequest request = channel.readOutbound();
         assertThat(request.headers().get("connect-timeout-ms")).isEqualTo("1500");
+    }
+
+    private void installAndStartWithTimeout(ConnectMethodDefinition method, long timeoutMs) {
+        ConnectClientCallStart cs = new ConnectClientCallStart(
+            SERVICE, method, Map.of(), false, "proto", timeoutMs);
+        channel.pipeline().addLast(new StreamingClientHandler(cs, ClientTestSupport.config(), observer));
+        channel.writeOutbound(cs);
+    }
+
+    @Test
+    void firesDeadlineExceededWhenServerSilent() {
+        installAndStartWithTimeout(SERVER_STREAMING, 50L);
+        channel.readOutbound(); // request headers
+
+        channel.advanceTimeBy(50, TimeUnit.MILLISECONDS);
+        channel.runScheduledPendingTasks();
+
+        Object eos = channel.readInbound();
+        assertThat(eos).isInstanceOf(ConnectEndOfStream.class);
+        assertThat(((ConnectEndOfStream) eos).error()).isNotNull();
+        assertThat(((ConnectEndOfStream) eos).error().code())
+            .isEqualTo(ConnectErrorCode.DEADLINE_EXCEEDED);
+
+        assertThat(observer.completeCount).isEqualTo(1);
+        assertThat(observer.completeError).isNotNull();
+        assertThat(observer.completeError.code()).isEqualTo(ConnectErrorCode.DEADLINE_EXCEEDED);
+        assertThat(channel.isOpen()).isFalse();
+    }
+
+    @Test
+    void cancelsDeadlineOnNormalCompletion() {
+        installAndStartWithTimeout(SERVER_STREAMING, 50L);
+        channel.readOutbound(); // request headers
+
+        channel.writeInbound(okStreamingResponse());
+        channel.writeInbound(endStreamFrame("{}"));
+
+        // Deadline was cancelled at end-of-stream; advancing must not deliver a second completion.
+        channel.advanceTimeBy(100, TimeUnit.MILLISECONDS);
+        channel.runScheduledPendingTasks();
+
+        assertThat(observer.completeCount).isEqualTo(1);
+        assertThat(observer.completeError).isNull();
+    }
+
+    @Test
+    void noDeadlineTimerWhenTimeoutNull() {
+        install(SERVER_STREAMING);
+        start(SERVER_STREAMING);
+        channel.readOutbound();
+
+        channel.advanceTimeBy(1, TimeUnit.HOURS);
+        channel.runScheduledPendingTasks();
+
+        assertThat(observer.completeCount).isZero();
+        assertThat(channel.isOpen()).isTrue();
     }
 }

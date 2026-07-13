@@ -27,6 +27,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -378,6 +379,67 @@ class UnaryResponseClientHandlerTest {
         channel.pipeline().fireChannelInactive();
 
         assertThat(observer.completeCount).isEqualTo(1);
+
+        channel.finishAndReleaseAll();
+    }
+
+    private EmbeddedChannel newChannelWithTimeout(ClientTestSupport.RecordingObserver observer, long timeoutMs) {
+        EmbeddedChannel channel = new EmbeddedChannel();
+        ConnectClientCallStart cs = new ConnectClientCallStart(SERVICE, METHOD, Map.of(), false, "proto", timeoutMs);
+        channel.pipeline().addLast(new UnaryResponseClientHandler(cs, config, observer));
+        return channel;
+    }
+
+    @Test
+    void firesDeadlineExceededWhenServerDoesNotRespondInTime() {
+        var observer = new ClientTestSupport.RecordingObserver();
+        EmbeddedChannel channel = newChannelWithTimeout(observer, 50L);
+
+        channel.advanceTimeBy(50, TimeUnit.MILLISECONDS);
+        channel.runScheduledPendingTasks();
+
+        Object endOfStream = channel.readInbound();
+        assertThat(endOfStream).isInstanceOf(ConnectEndOfStream.class);
+        assertThat(((ConnectEndOfStream) endOfStream).error()).isNotNull();
+        assertThat(((ConnectEndOfStream) endOfStream).error().code())
+            .isEqualTo(ConnectErrorCode.DEADLINE_EXCEEDED);
+
+        assertThat(observer.completeCount).isEqualTo(1);
+        assertThat(observer.completeError).isNotNull();
+        assertThat(observer.completeError.code()).isEqualTo(ConnectErrorCode.DEADLINE_EXCEEDED);
+        assertThat(channel.isOpen()).isFalse();
+
+        channel.finishAndReleaseAll();
+    }
+
+    @Test
+    void doesNotFireDeadlineWhenResponseArrivesInTime() {
+        var observer = new ClientTestSupport.RecordingObserver();
+        EmbeddedChannel channel = newChannelWithTimeout(observer, 50L);
+
+        channel.writeInbound(response(200, ClientTestSupport.encode(proto, RESPONSE),
+            "application/proto", null));
+
+        // Advancing past the deadline must not deliver a second (deadline) completion.
+        channel.advanceTimeBy(100, TimeUnit.MILLISECONDS);
+        channel.runScheduledPendingTasks();
+
+        assertThat(observer.completeCount).isEqualTo(1);
+        assertThat(observer.completeError).isNull();
+
+        channel.finishAndReleaseAll();
+    }
+
+    @Test
+    void noDeadlineTimerWhenTimeoutNull() {
+        var observer = new ClientTestSupport.RecordingObserver();
+        EmbeddedChannel channel = newChannel(observer);
+
+        channel.advanceTimeBy(1, TimeUnit.HOURS);
+        channel.runScheduledPendingTasks();
+
+        assertThat(observer.completeCount).isZero();
+        assertThat(channel.isOpen()).isTrue();
 
         channel.finishAndReleaseAll();
     }
