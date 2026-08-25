@@ -27,13 +27,53 @@ your service code.
 - **Netty 4.2.x.** 4.2 is intentional: it is the first Netty line that lines up
   with the incubator HTTP/3 codec, which is where transport work in this
   library is heading. Older Netty 4.1 deployments are not supported.
-- **Protobuf 4.29+** *(optional)* — only required if you use the bundled
-  `ConnectProtobufCodec` / `ConnectProtobufJsonCodec`. Both are declared
-  `optional` in the POM; if you ship your own codecs you can exclude the
-  protobuf dependency entirely.
+- **Protobuf 4.36+** *(optional)* — only required when the
+  `connect-java-codec-protobuf` module is used. Applications with another codec
+  do not need a Protobuf dependency.
+
+## Modules
+
+| Artifact | Purpose |
+| --- | --- |
+| `connect-java-bom` | Aligns connect-java artifacts and their supported Netty, Protobuf, gRPC, JSON, and logging dependencies. |
+| `connect-java-api` | Netty-free messages, errors, call metadata, and service/method definitions. |
+| `connect-java-core` | Shared codec and compression SPIs plus transport-independent protocol mappings. |
+| `connect-java-codec-protobuf` | Binary Protobuf and standard Protobuf JSON codecs. |
+| `connect-java-server` | Netty HTTP/1.1 and HTTP/2 server protocol implementation. |
+
+Import the BOM, then select the implementation modules needed by the application:
+
+```xml
+<dependencyManagement>
+  <dependencies>
+    <dependency>
+      <groupId>io.github.suboptimal-solutions</groupId>
+      <artifactId>connect-java-bom</artifactId>
+      <version>${connect-java.version}</version>
+      <type>pom</type>
+      <scope>import</scope>
+    </dependency>
+  </dependencies>
+</dependencyManagement>
+
+<dependencies>
+  <dependency>
+    <groupId>io.github.suboptimal-solutions</groupId>
+    <artifactId>connect-java-server</artifactId>
+  </dependency>
+  <dependency>
+    <groupId>io.github.suboptimal-solutions</groupId>
+    <artifactId>connect-java-codec-protobuf</artifactId>
+  </dependency>
+</dependencies>
+```
+
+The root `connect-java` artifact is the Maven parent and reactor aggregator; it
+is no longer the runtime JAR.
 
 ## Table of contents
 
+- [Modules](#modules)
 - [Why another Connect implementation](#why-another-connect-implementation)
 - [Protocol coverage](#protocol-coverage)
 - [Quickstart: plain HTTP/1.1 Netty server](#quickstart-plain-http11-netty-server)
@@ -54,7 +94,7 @@ The intended differentiator is **integration flexibility**:
   any pipeline that already carries `HttpServerCodec` (HTTP/1.1) or an HTTP/2
   stream channel.
 - **No opinion on the service abstraction.** The "terminal" handler at the end of
-  the chain is one you supply via a `ConnectCallHandlerFactory`. Wire it to
+  the chain is one you supply via a `ConnectServerCallHandlerFactory`. Wire it to
   generated proto stubs, hand-rolled handlers, a Reactor pipeline, or anything
   else that consumes `ConnectCallExchange` + `ConnectPayload` and writes
   `ConnectPayload`/`ConnectError`/`ConnectEndOfStream` back.
@@ -100,7 +140,7 @@ import io.netty.handler.codec.http.HttpServerCodec;
 
 import io.suboptimal.connectjava.codec.protobuf.ConnectProtobufCodecs;
 import io.suboptimal.connectjava.model.*;
-import io.suboptimal.connectjava.protocol.*;
+import io.suboptimal.connectjava.protocol.server.*;
 
 import java.util.Map;
 
@@ -118,7 +158,7 @@ ConnectServiceDefinition greeter = new ConnectServiceDefinition(
 ConnectProtocolConfig config = ConnectProtocolConfig
     .builder(
         Map.of(greeter.serviceName(), greeter),
-        GreeterCallHandler::new,                       // ConnectCallHandlerFactory
+        GreeterCallHandler::new,                       // ConnectServerCallHandlerFactory
         new ConnectProtocolParameters(
             /* maxRequestBytes */ 4 * 1024 * 1024,
             /* maxFrameBytes   */ 1 * 1024 * 1024,
@@ -266,28 +306,28 @@ reflection, no code generation required.
 
 | Type | What it carries |
 | --- | --- |
-| [`ConnectServiceDefinition`](src/main/java/io/suboptimal/connectjava/model/ConnectServiceDefinition.java) | Connect service name, a map of method definitions, and an opaque `schema` slot for any descriptor you want to attach (e.g. a proto `ServiceDescriptor`). |
-| [`ConnectMethodDefinition`](src/main/java/io/suboptimal/connectjava/model/ConnectMethodDefinition.java) | Method name, [`ConnectMethodType`](src/main/java/io/suboptimal/connectjava/model/ConnectMethodType.java), request/response Java types, and an `idempotent` flag that gates Unary-GET. |
-| [`ConnectMethodType`](src/main/java/io/suboptimal/connectjava/model/ConnectMethodType.java) | `UNARY`, `CLIENT_STREAMING`, `SERVER_STREAMING`, `BIDI_STREAMING`. |
+| [`ConnectServiceDefinition`](connect-java-api/src/main/java/io/suboptimal/connectjava/model/ConnectServiceDefinition.java) | Connect service name, a map of method definitions, and an opaque `schema` slot for any descriptor you want to attach (e.g. a proto `ServiceDescriptor`). |
+| [`ConnectMethodDefinition`](connect-java-api/src/main/java/io/suboptimal/connectjava/model/ConnectMethodDefinition.java) | Method name, [`ConnectMethodType`](connect-java-api/src/main/java/io/suboptimal/connectjava/model/ConnectMethodType.java), request/response Java types, and an `idempotent` flag that gates Unary-GET. |
+| [`ConnectMethodType`](connect-java-api/src/main/java/io/suboptimal/connectjava/model/ConnectMethodType.java) | `UNARY`, `CLIENT_STREAMING`, `SERVER_STREAMING`, `BIDI_STREAMING`. |
 
 Because `schema` is `Object`, the model adapts to any service description
 strategy — proto descriptors, hand-rolled interfaces, or anything else.
 
 ## Handler API
 
-The terminal handler you supply via `ConnectCallHandlerFactory` is a plain
+The terminal handler you supply via `ConnectServerCallHandlerFactory` is a plain
 Netty `ChannelHandler`. It receives a fixed set of sealed messages from
-[`io.suboptimal.connectjava.api`](src/main/java/io/suboptimal/connectjava/api/)
+[`io.suboptimal.connectjava.api`](connect-java-api/src/main/java/io/suboptimal/connectjava/api/)
 and writes a matching set back.
 
 | Type | Direction | Purpose |
 | --- | --- | --- |
-| [`ConnectCallExchange`](src/main/java/io/suboptimal/connectjava/api/ConnectCallExchange.java) | inbound (first) | Per-call snapshot: service & method definitions, [`ConnectRequestMeta`](src/main/java/io/suboptimal/connectjava/api/ConnectRequestMeta.java), and mutable [`ConnectResponseHeadersBuilder`](src/main/java/io/suboptimal/connectjava/api/ConnectResponseHeadersBuilder.java) / [`ConnectResponseTrailersBuilder`](src/main/java/io/suboptimal/connectjava/api/ConnectResponseTrailersBuilder.java). |
-| [`ConnectPayload`](src/main/java/io/suboptimal/connectjava/api/ConnectPayload.java) | inbound, outbound | A single decoded application message. |
-| [`ConnectEndOfStream`](src/main/java/io/suboptimal/connectjava/api/ConnectEndOfStream.java) | inbound, outbound | Successful end of a request or response stream. |
-| [`ConnectError`](src/main/java/io/suboptimal/connectjava/api/ConnectError.java) | outbound | Connect-native error (code, message, optional [`ConnectErrorDetail`](src/main/java/io/suboptimal/connectjava/api/ConnectErrorDetail.java) list); replaces `ConnectEndOfStream` on failure. |
-| [`ConnectRequestMeta`](src/main/java/io/suboptimal/connectjava/api/ConnectRequestMeta.java) | read-only | Lower-cased header map plus a typed attribute map keyed by [`ConnectAttributeKey`](src/main/java/io/suboptimal/connectjava/api/ConnectAttributeKey.java). |
-| [`ConnectAttributeKey`](src/main/java/io/suboptimal/connectjava/api/ConnectAttributeKey.java) | API | Pooled, type-safe key for stashing per-call data from interceptors into the terminal handler. |
+| [`ConnectCallExchange`](connect-java-api/src/main/java/io/suboptimal/connectjava/api/ConnectCallExchange.java) | inbound (first) | Per-call snapshot: service & method definitions, [`ConnectRequestMeta`](connect-java-api/src/main/java/io/suboptimal/connectjava/api/ConnectRequestMeta.java), and mutable [`ConnectResponseHeadersBuilder`](connect-java-api/src/main/java/io/suboptimal/connectjava/api/ConnectResponseHeadersBuilder.java) / [`ConnectResponseTrailersBuilder`](connect-java-api/src/main/java/io/suboptimal/connectjava/api/ConnectResponseTrailersBuilder.java). |
+| [`ConnectPayload`](connect-java-api/src/main/java/io/suboptimal/connectjava/api/ConnectPayload.java) | inbound, outbound | A single decoded application message. |
+| [`ConnectEndOfStream`](connect-java-api/src/main/java/io/suboptimal/connectjava/api/ConnectEndOfStream.java) | inbound, outbound | Successful end of a request or response stream. |
+| [`ConnectError`](connect-java-api/src/main/java/io/suboptimal/connectjava/api/ConnectError.java) | outbound | Connect-native error (code, message, optional [`ConnectErrorDetail`](connect-java-api/src/main/java/io/suboptimal/connectjava/api/ConnectErrorDetail.java) list); replaces `ConnectEndOfStream` on failure. |
+| [`ConnectRequestMeta`](connect-java-api/src/main/java/io/suboptimal/connectjava/api/ConnectRequestMeta.java) | read-only | Lower-cased header map plus a typed attribute map keyed by [`ConnectAttributeKey`](connect-java-api/src/main/java/io/suboptimal/connectjava/api/ConnectAttributeKey.java). |
+| [`ConnectAttributeKey`](connect-java-api/src/main/java/io/suboptimal/connectjava/api/ConnectAttributeKey.java) | API | Pooled, type-safe key for stashing per-call data from interceptors into the terminal handler. |
 
 `ConnectCallExchange`, `ConnectPayload`, `ConnectEndOfStream`, and
 `ConnectError` together implement the sealed `ConnectMessage` interface, so a
@@ -325,11 +365,11 @@ with a registry and a sensible default.
 
 | Extension | Built-ins | Configured via |
 | --- | --- | --- |
-| **Terminal call handler** — invokes user service logic. | n/a (always app-provided) | [`ConnectCallHandlerFactory`](src/main/java/io/suboptimal/connectjava/protocol/ConnectCallHandlerFactory.java) on the config builder. |
-| **Interceptors** — per-call lifecycle observers and accept/reject decisions. | n/a | [`ConnectInterceptor`](src/main/java/io/suboptimal/connectjava/protocol/ConnectInterceptor.java) returning a `Decision`; lifecycle callbacks via [`ConnectCallObserver`](src/main/java/io/suboptimal/connectjava/protocol/ConnectCallObserver.java). |
-| **Codecs** — wire payload encoding. | `application/proto`, `application/json` via [`ConnectProtobufCodecs.defaults()`](src/main/java/io/suboptimal/connectjava/codec/protobuf/ConnectProtobufCodecs.java). | [`ConnectCodec`](src/main/java/io/suboptimal/connectjava/codec/ConnectCodec.java) + [`ConnectCodecRegistry`](src/main/java/io/suboptimal/connectjava/codec/ConnectCodecRegistry.java). |
-| **Compression** — per-message compression algorithms. | `identity` (always) + `gzip` via [`ConnectCompressionRegistry.standard()`](src/main/java/io/suboptimal/connectjava/compression/ConnectCompressionRegistry.java). | [`ConnectCompression`](src/main/java/io/suboptimal/connectjava/compression/ConnectCompression.java) + [`ConnectCompressionRegistry`](src/main/java/io/suboptimal/connectjava/compression/ConnectCompressionRegistry.java). |
-| **JSON serializer** — used only for Connect error bodies and EndStreamResponse envelopes. | A zero-dependency string-builder serializer. | [`ConnectJsonSerializer`](src/main/java/io/suboptimal/connectjava/protocol/ConnectJsonSerializer.java) on the config builder. |
+| **Terminal call handler** — invokes user service logic. | n/a (always app-provided) | [`ConnectServerCallHandlerFactory`](connect-java-server/src/main/java/io/suboptimal/connectjava/protocol/server/ConnectServerCallHandlerFactory.java) on the config builder. |
+| **Interceptors** — per-call lifecycle observers and accept/reject decisions. | n/a | [`ConnectInterceptor`](connect-java-server/src/main/java/io/suboptimal/connectjava/protocol/server/ConnectInterceptor.java) returning a `Decision`; lifecycle callbacks via [`ConnectCallObserver`](connect-java-server/src/main/java/io/suboptimal/connectjava/protocol/server/ConnectCallObserver.java). |
+| **Codecs** — wire payload encoding. | `application/proto`, `application/json` via [`ConnectProtobufCodecs.defaults()`](connect-java-codec-protobuf/src/main/java/io/suboptimal/connectjava/codec/protobuf/ConnectProtobufCodecs.java). | [`ConnectCodec`](connect-java-core/src/main/java/io/suboptimal/connectjava/codec/ConnectCodec.java) + [`ConnectCodecRegistry`](connect-java-core/src/main/java/io/suboptimal/connectjava/codec/ConnectCodecRegistry.java). |
+| **Compression** — per-message compression algorithms. | `identity` (always) + `gzip` via [`ConnectCompressionRegistry.standard()`](connect-java-core/src/main/java/io/suboptimal/connectjava/compression/ConnectCompressionRegistry.java). | [`ConnectCompression`](connect-java-core/src/main/java/io/suboptimal/connectjava/compression/ConnectCompression.java) + [`ConnectCompressionRegistry`](connect-java-core/src/main/java/io/suboptimal/connectjava/compression/ConnectCompressionRegistry.java). |
+| **JSON serializer** — used only for Connect error bodies and EndStreamResponse envelopes. | A zero-dependency string-builder serializer. | [`ConnectJsonSerializer`](connect-java-server/src/main/java/io/suboptimal/connectjava/protocol/server/ConnectJsonSerializer.java) on the config builder. |
 
 Interceptors observe both inbound and outbound messages and can attach typed
 data to `ConnectRequestMeta` via `ConnectAttributeKey<T>` so the terminal
@@ -347,7 +387,7 @@ serves Connect alongside any other HTTP/1.1 or HTTP/2 protocol you implement,
 with ALPN, H2C prior-knowledge, and H2C upgrade negotiation done for you:
 
 ```java
-import io.suboptimal.connectjava.protocol.ConnectProtocol;
+import io.suboptimal.connectjava.protocol.server.ConnectProtocol;
 import io.suboptimal.nettymultiprotocol.AppChannelConfigurer;
 import io.suboptimal.nettymultiprotocol.AppProtocol;
 import io.suboptimal.nettymultiprotocol.AppProtocolRegistry;
@@ -395,8 +435,8 @@ recommended, not required.
   high-performance JSON serialization for protobuf messages. A first-class
   `ConnectCodec` / `ConnectJsonSerializer` integration is on the near-term
   roadmap; until then you can wire it manually via the
-  [`ConnectCodec`](src/main/java/io/suboptimal/connectjava/codec/ConnectCodec.java) and
-  [`ConnectJsonSerializer`](src/main/java/io/suboptimal/connectjava/protocol/ConnectJsonSerializer.java)
+  [`ConnectCodec`](connect-java-core/src/main/java/io/suboptimal/connectjava/codec/ConnectCodec.java) and
+  [`ConnectJsonSerializer`](connect-java-server/src/main/java/io/suboptimal/connectjava/protocol/server/ConnectJsonSerializer.java)
   SPIs.
 
 ## License

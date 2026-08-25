@@ -43,22 +43,24 @@ Netty HTTP request
   -> Netty HTTP response
 ```
 
-## Package layout
+## Module and package layout
 
 Dependency direction should flow from protocol implementation toward small SPIs, not the other way around.
 
-- `io.suboptimal.connectjava.api` - Public surface visible to service authors: messages, errors, exchange, headers/trailers builders, attribute keys.
-- `io.suboptimal.connectjava.model` - Service and method descriptors used to register endpoints.
-- `io.suboptimal.connectjava.codec` - Codec SPI for encoding and decoding application messages, plus built-in protobuf codecs.
-- `io.suboptimal.connectjava.compression` - Compression SPI and built-in identity/gzip implementations.
-- `io.suboptimal.connectjava.protocol` - Connect protocol implementation, HTTP mapping, framing, metadata, and error handling. Internal handlers here are package-private.
+- `connect-java-api` - Netty-free public API in `io.suboptimal.connectjava.api` and service descriptors in `io.suboptimal.connectjava.model`.
+- `connect-java-core` - Shared codec and compression SPIs in `io.suboptimal.connectjava.codec` and `io.suboptimal.connectjava.compression`, plus common protocol utilities in `io.suboptimal.connectjava.protocol`.
+- `connect-java-codec-protobuf` - Protobuf implementations in `io.suboptimal.connectjava.codec.protobuf`.
+- `connect-java-server` - Netty server implementation in `io.suboptimal.connectjava.protocol.server`. Internal handlers here are package-private.
+- `connect-java-bom` - Public dependency management for the module family and compatible runtime dependencies.
+
+Module dependencies flow `server -> core -> api` and `codec-protobuf -> core`. The API module must not depend on Netty.
 
 ## Key conventions
 
 - Public classes, interfaces, enums, and records are prefixed with `Connect` (e.g. `ConnectCodec`, `ConnectCompressionRegistry`). Package-private internal types do not need the prefix.
+- Types that must be public only to cross Maven module boundaries are annotated with `@ApiStatus.Internal` and are not stable API.
 - Put `@NullMarked` on library packages via `package-info.java`.
 - Mark nullable values explicitly with `@Nullable`.
 - Tests use JUnit 5 and AssertJ.
 - Do not use Mockito.
 - Prefer sealed hierarchies where they make exhaustive pattern matching clear.
-
