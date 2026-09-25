@@ -3,6 +3,7 @@ package io.suboptimal.connectjava.protocol.server;
 import io.suboptimal.connectjava.codec.ConnectCodecRegistry;
 import io.suboptimal.connectjava.compression.ConnectCompressionRegistry;
 import io.suboptimal.connectjava.model.ConnectServiceDefinition;
+import io.suboptimal.connectjava.protocol.server.spi.ConnectServerCallHandlerFactory;
 
 import java.util.List;
 import java.util.Map;

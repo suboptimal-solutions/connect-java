@@ -10,6 +10,6 @@
     </parent>
     <artifactId>connect-java-bom</artifactId>
     <packaging>pom</packaging>
-    <name>connect-java BOM</name>
-    <description>Dependency management for connect-java modules and their public runtime surface.</description>
+    <name>connect-java: BOM</name>
+    <description>Aligned versions for connect-java modules and compatible third-party libraries.</description>
 </project>

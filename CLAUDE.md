@@ -48,12 +48,16 @@ Netty HTTP request
 Dependency direction should flow from protocol implementation toward small SPIs, not the other way around.
 
 - `connect-java-api` - Netty-free public API in `io.suboptimal.connectjava.api` and service descriptors in `io.suboptimal.connectjava.model`.
-- `connect-java-core` - Shared codec and compression SPIs in `io.suboptimal.connectjava.codec` and `io.suboptimal.connectjava.compression`, plus common protocol utilities in `io.suboptimal.connectjava.protocol`.
+- `connect-java-codec` - Netty-buffer-based codec SPI and registry in `io.suboptimal.connectjava.codec`.
+- `connect-java-compression` - Netty-buffer-based compression SPI, registry, identity, and gzip in `io.suboptimal.connectjava.compression`.
+- `connect-java-core` - Shared protocol utilities in `io.suboptimal.connectjava.protocol`.
+- `connect-java-server-spi` - Netty call-handler factory in `io.suboptimal.connectjava.protocol.server.spi` for server adapters.
 - `connect-java-codec-protobuf` - Protobuf implementations in `io.suboptimal.connectjava.codec.protobuf`.
 - `connect-java-server` - Netty server implementation in `io.suboptimal.connectjava.protocol.server`. Internal handlers here are package-private.
+- `connect-java-grpc-bridge` - Adapter from gRPC-Java services to the Connect server handler SPI in `io.suboptimal.connectjava.grpcbridge`.
 - `connect-java-bom` - Public dependency management for the module family and compatible runtime dependencies.
 
-Module dependencies flow `server -> core -> api` and `codec-protobuf -> core`. The API module must not depend on Netty.
+Module dependencies flow `grpc-bridge -> server-spi`, `codec-protobuf -> codec`, `core -> api`, and `server -> api + core + codec + compression + server-spi`. The API module must not depend on Netty.
 
 ## Key conventions
 
@@ -64,3 +68,11 @@ Module dependencies flow `server -> core -> api` and `codec-protobuf -> core`. T
 - Tests use JUnit 5 and AssertJ.
 - Do not use Mockito.
 - Prefer sealed hierarchies where they make exhaustive pattern matching clear.
+
+## Maven POM conventions
+
+- List JSpecify first in each module's dependencies, followed by JetBrains annotations when used.
+- List dependencies on other connect-java modules next, then other production dependencies.
+- Keep all test-scoped dependencies at the end of each dependency list.
+- Use the `junit-jupiter` aggregate artifact for tests. Manage JUnit Jupiter, AssertJ, and SLF4J versions in the parent POM; child modules omit those versions.
+- Use `connect-java: Component` names and concise descriptions that state each module's role.

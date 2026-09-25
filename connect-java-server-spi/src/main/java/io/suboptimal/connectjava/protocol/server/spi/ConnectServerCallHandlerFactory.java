@@ -1,4 +1,4 @@
-package io.suboptimal.connectjava.protocol.server;
+package io.suboptimal.connectjava.protocol.server.spi;
 
 import io.netty.channel.ChannelHandler;
 

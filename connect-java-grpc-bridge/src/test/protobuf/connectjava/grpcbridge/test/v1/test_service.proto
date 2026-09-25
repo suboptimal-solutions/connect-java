@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package connectjava.grpcbridge.test.v1;
+
+option java_multiple_files = true;
+
+service TestService {
+  rpc SafeUnary(TestRequest) returns (TestResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  rpc Unary(TestRequest) returns (TestResponse);
+  rpc ServerStream(TestRequest) returns (stream TestResponse);
+  rpc ClientStream(stream TestRequest) returns (TestResponse);
+  rpc BidiStream(stream TestRequest) returns (stream TestResponse);
+}
+
+message TestRequest {
+  string text = 1;
+}
+
+message TestResponse {
+  string text = 1;
+}

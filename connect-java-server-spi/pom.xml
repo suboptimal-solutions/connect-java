@@ -8,29 +8,17 @@
         <artifactId>connect-java</artifactId>
         <version>0.1.0-SNAPSHOT</version>
     </parent>
-    <artifactId>connect-java-codec-protobuf</artifactId>
-    <name>connect-java: Protobuf Codec</name>
-    <description>Binary Protobuf and Protobuf JSON codecs for connect-java.</description>
+    <artifactId>connect-java-server-spi</artifactId>
+    <name>connect-java: Server SPI</name>
+    <description>Netty call-handler factory SPI for connect-java server adapters.</description>
     <dependencies>
         <dependency>
             <groupId>org.jspecify</groupId>
             <artifactId>jspecify</artifactId>
         </dependency>
         <dependency>
-            <groupId>${project.groupId}</groupId>
-            <artifactId>connect-java-codec</artifactId>
-        </dependency>
-        <dependency>
             <groupId>io.netty</groupId>
-            <artifactId>netty-buffer</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.google.protobuf</groupId>
-            <artifactId>protobuf-java</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.google.protobuf</groupId>
-            <artifactId>protobuf-java-util</artifactId>
+            <artifactId>netty-transport</artifactId>
         </dependency>
     </dependencies>
 </project>

@@ -30,6 +30,8 @@ your service code.
 - **Protobuf 4.36+** *(optional)* — only required when the
   `connect-java-codec-protobuf` module is used. Applications with another codec
   do not need a Protobuf dependency.
+- **gRPC-Java 1.83+** *(optional)* — only required when adapting generated gRPC
+  service implementations through `connect-java-grpc-bridge`.
 
 ## Modules
 
@@ -37,9 +39,13 @@ your service code.
 | --- | --- |
 | `connect-java-bom` | Aligns connect-java artifacts and their supported Netty, Protobuf, gRPC, JSON, and logging dependencies. |
 | `connect-java-api` | Netty-free messages, errors, call metadata, and service/method definitions. |
-| `connect-java-core` | Shared codec and compression SPIs plus transport-independent protocol mappings. |
+| `connect-java-codec` | Codec interface and registry for custom payload formats. |
+| `connect-java-compression` | Compression interface and registry, with identity and gzip implementations. |
+| `connect-java-core` | Shared protocol mappings used by transports. |
+| `connect-java-server-spi` | Netty call-handler factory used by server adapters. |
 | `connect-java-codec-protobuf` | Binary Protobuf and standard Protobuf JSON codecs. |
 | `connect-java-server` | Netty HTTP/1.1 and HTTP/2 server protocol implementation. |
+| `connect-java-grpc-bridge` | Adapts gRPC-Java `BindableService` implementations to the Connect server pipeline. |
 
 Import the BOM, then select the implementation modules needed by the application:
 
@@ -65,6 +71,11 @@ Import the BOM, then select the implementation modules needed by the application
     <groupId>io.github.suboptimal-solutions</groupId>
     <artifactId>connect-java-codec-protobuf</artifactId>
   </dependency>
+  <!-- Add when serving existing gRPC-Java service implementations. -->
+  <dependency>
+    <groupId>io.github.suboptimal-solutions</groupId>
+    <artifactId>connect-java-grpc-bridge</artifactId>
+  </dependency>
 </dependencies>
 ```
 
@@ -77,6 +88,7 @@ is no longer the runtime JAR.
 - [Why another Connect implementation](#why-another-connect-implementation)
 - [Protocol coverage](#protocol-coverage)
 - [Quickstart: plain HTTP/1.1 Netty server](#quickstart-plain-http11-netty-server)
+- [gRPC-Java bridge](#grpc-java-bridge)
 - [Pipeline shape](#pipeline-shape)
 - [Domain model](#domain-model)
 - [Handler API](#handler-api)
@@ -188,6 +200,33 @@ new ServerBootstrap()
 `GreeterCallHandler` is your own Netty `ChannelInboundHandler`. It receives the
 inbound Connect messages defined in [Handler API](#handler-api) and writes back
 the corresponding response messages — see that section for the exact contract.
+
+## gRPC-Java bridge
+
+`connect-java-grpc-bridge` lets an existing generated `*ImplBase` service handle
+Connect requests without adding Connect-specific code to the service:
+
+```java
+import io.suboptimal.connectjava.grpcbridge.ConnectGrpcBridge;
+
+ConnectGrpcBridge bridge = ConnectGrpcBridge.of(new GreeterService());
+
+ConnectProtocolConfig config = ConnectProtocolConfig.builder(
+    bridge.serviceDefinitions(),
+    bridge,
+    new ConnectProtocolParameters(
+        4 * 1024 * 1024,
+        1 * 1024 * 1024,
+        ConnectCorsParameters.disabled()),
+    ConnectProtobufCodecs.defaults())
+    .build();
+```
+
+By default, service and interceptor callbacks run on virtual threads and may
+block without stalling the Netty event loop. Applications can supply their own
+executor with `withServiceExecutor(...)`; `withDirectExecutor()` is reserved for
+strictly non-blocking services. See the [bridge module README](connect-java-grpc-bridge/README.md)
+for configuration details and behavioural constraints.
 
 ## Pipeline shape
 
@@ -365,10 +404,10 @@ with a registry and a sensible default.
 
 | Extension | Built-ins | Configured via |
 | --- | --- | --- |
-| **Terminal call handler** — invokes user service logic. | n/a (always app-provided) | [`ConnectServerCallHandlerFactory`](connect-java-server/src/main/java/io/suboptimal/connectjava/protocol/server/ConnectServerCallHandlerFactory.java) on the config builder. |
+| **Terminal call handler** — invokes user service logic. | n/a (always app-provided) | [`ConnectServerCallHandlerFactory`](connect-java-server-spi/src/main/java/io/suboptimal/connectjava/protocol/server/spi/ConnectServerCallHandlerFactory.java) on the config builder. |
 | **Interceptors** — per-call lifecycle observers and accept/reject decisions. | n/a | [`ConnectInterceptor`](connect-java-server/src/main/java/io/suboptimal/connectjava/protocol/server/ConnectInterceptor.java) returning a `Decision`; lifecycle callbacks via [`ConnectCallObserver`](connect-java-server/src/main/java/io/suboptimal/connectjava/protocol/server/ConnectCallObserver.java). |
-| **Codecs** — wire payload encoding. | `application/proto`, `application/json` via [`ConnectProtobufCodecs.defaults()`](connect-java-codec-protobuf/src/main/java/io/suboptimal/connectjava/codec/protobuf/ConnectProtobufCodecs.java). | [`ConnectCodec`](connect-java-core/src/main/java/io/suboptimal/connectjava/codec/ConnectCodec.java) + [`ConnectCodecRegistry`](connect-java-core/src/main/java/io/suboptimal/connectjava/codec/ConnectCodecRegistry.java). |
-| **Compression** — per-message compression algorithms. | `identity` (always) + `gzip` via [`ConnectCompressionRegistry.standard()`](connect-java-core/src/main/java/io/suboptimal/connectjava/compression/ConnectCompressionRegistry.java). | [`ConnectCompression`](connect-java-core/src/main/java/io/suboptimal/connectjava/compression/ConnectCompression.java) + [`ConnectCompressionRegistry`](connect-java-core/src/main/java/io/suboptimal/connectjava/compression/ConnectCompressionRegistry.java). |
+| **Codecs** — wire payload encoding. | `application/proto`, `application/json` via [`ConnectProtobufCodecs.defaults()`](connect-java-codec-protobuf/src/main/java/io/suboptimal/connectjava/codec/protobuf/ConnectProtobufCodecs.java). | [`ConnectCodec`](connect-java-codec/src/main/java/io/suboptimal/connectjava/codec/ConnectCodec.java) + [`ConnectCodecRegistry`](connect-java-codec/src/main/java/io/suboptimal/connectjava/codec/ConnectCodecRegistry.java). |
+| **Compression** — per-message compression algorithms. | `identity` (always) + `gzip` via [`ConnectCompressionRegistry.standard()`](connect-java-compression/src/main/java/io/suboptimal/connectjava/compression/ConnectCompressionRegistry.java). | [`ConnectCompression`](connect-java-compression/src/main/java/io/suboptimal/connectjava/compression/ConnectCompression.java) + [`ConnectCompressionRegistry`](connect-java-compression/src/main/java/io/suboptimal/connectjava/compression/ConnectCompressionRegistry.java). |
 | **JSON serializer** — used only for Connect error bodies and EndStreamResponse envelopes. | A zero-dependency string-builder serializer. | [`ConnectJsonSerializer`](connect-java-server/src/main/java/io/suboptimal/connectjava/protocol/server/ConnectJsonSerializer.java) on the config builder. |
 
 Interceptors observe both inbound and outbound messages and can attach typed
@@ -435,7 +474,7 @@ recommended, not required.
   high-performance JSON serialization for protobuf messages. A first-class
   `ConnectCodec` / `ConnectJsonSerializer` integration is on the near-term
   roadmap; until then you can wire it manually via the
-  [`ConnectCodec`](connect-java-core/src/main/java/io/suboptimal/connectjava/codec/ConnectCodec.java) and
+  [`ConnectCodec`](connect-java-codec/src/main/java/io/suboptimal/connectjava/codec/ConnectCodec.java) and
   [`ConnectJsonSerializer`](connect-java-server/src/main/java/io/suboptimal/connectjava/protocol/server/ConnectJsonSerializer.java)
   SPIs.
 

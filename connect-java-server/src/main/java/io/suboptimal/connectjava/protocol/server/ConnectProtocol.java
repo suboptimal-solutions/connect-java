@@ -1,5 +1,7 @@
 package io.suboptimal.connectjava.protocol.server;
 
+import io.suboptimal.connectjava.protocol.server.spi.ConnectServerCallHandlerFactory;
+
 /**
  * Buf Connect protocol over HTTP/1.1 and HTTP/2.
  *

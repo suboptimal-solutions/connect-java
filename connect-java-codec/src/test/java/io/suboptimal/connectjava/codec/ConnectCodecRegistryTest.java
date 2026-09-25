@@ -10,7 +10,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ConnectCodecRegistryTest {
-
     @Test
     void registersCodecsInServerPreferenceOrder() {
         ConnectCodec first = new NoopCodec("proto");
