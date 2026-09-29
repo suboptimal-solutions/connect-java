@@ -155,26 +155,6 @@ ConnectGrpcBridge bridge = ConnectGrpcBridge.builder()
   retains gRPC-Java's default `null`; the inbound `host` header is available
   through request metadata.
 
-One interceptor caveat matters for calls with no response messages. Generated
-gRPC stubs call `sendHeaders` when they send the first message, so an interceptor
-that adds response headers only in its `sendHeaders` override will not add them
-to an immediate error or an empty response stream. If those headers are needed,
-the interceptor must send them from its `close` path when none have been sent.
-Response trailers are still processed on every close path.
-
-For an interceptor that adds headers in `sendHeaders`, the relevant part of its
-`ServerCall` wrapper can flush those headers before closing:
-
-```java
-@Override
-public void close(Status status, Metadata trailers) {
-    if (!headersSent) {
-        sendHeaders(new Metadata()); // invokes this wrapper's sendHeaders override
-    }
-    super.close(status, trailers);
-}
-```
-
 Source-level research on the gRPC-Java contracts and the bridge's design is
 kept in the companion `connect-java-specs` project under
 `grpc-java/grpc-specifics.md`. Its source citations were established against
