@@ -6,7 +6,7 @@
     <parent>
         <groupId>io.github.suboptimal-solutions</groupId>
         <artifactId>connect-java</artifactId>
-        <version>0.1.0-SNAPSHOT</version>
+        <version>0.1.0</version>
     </parent>
     <artifactId>connect-java-server-spi</artifactId>
     <name>connect-java: Server SPI</name>
