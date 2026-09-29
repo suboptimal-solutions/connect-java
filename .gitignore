@@ -18,6 +18,7 @@ target/
 *.tmp
 
 dependency-reduced-pom.xml
+.flattened-pom.xml
 release.properties
 
 plan/

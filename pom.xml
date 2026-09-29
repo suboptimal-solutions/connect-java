@@ -268,7 +268,6 @@
                         <version>${maven-javadoc-plugin.version}</version>
                         <configuration>
                             <doclint>none</doclint>
-                            <excludePackageNames>io.suboptimal.connectjava.protocol</excludePackageNames>
                         </configuration>
                         <executions>
                             <execution>

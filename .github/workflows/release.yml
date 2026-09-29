@@ -55,6 +55,30 @@ jobs:
       - name: Build and test
         run: ./mvnw -B verify
 
+      - name: Verify release artifacts
+        run: |
+          ./mvnw -B -P release -Dgpg.skip=true -DskipTests -pl '!connect-java-conformance' package
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          ns = '{http://maven.apache.org/POM/4.0.0}'
+          root = ET.parse('pom.xml').getroot()
+          version = root.findtext(f'{ns}version')
+          for module in root.findall(f'{ns}modules/{ns}module'):
+            module_name = module.text
+            if module_name == 'connect-java-conformance':
+              continue
+            child = ET.parse(Path(module_name) / 'pom.xml').getroot()
+            if child.findtext(f'{ns}packaging', 'jar') == 'pom':
+              continue
+            artifact_id = child.findtext(f'{ns}artifactId')
+            for classifier in ('sources', 'javadoc'):
+              archive = Path(module_name) / 'target' / f'{artifact_id}-{version}-{classifier}.jar'
+              if not archive.is_file() or archive.stat().st_size == 0:
+                raise SystemExit(f'Missing release artifact: {archive}')
+          PY
+
   publish:
     needs: verify
     if: github.repository == 'suboptimal-solutions/connect-java'
