@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+
+exec /usr/local/bin/connectconformance \
+    --mode server \
+    --conf /app/conformance/connect-java-conformance.yaml \
+    --known-failing @/app/conformance/known-failing.txt \
+    "$@" \
+    -- /app/run-server

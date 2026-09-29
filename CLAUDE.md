@@ -56,6 +56,7 @@ Dependency direction should flow from protocol implementation toward small SPIs,
 - `connect-java-server` - Netty server implementation in `io.suboptimal.connectjava.protocol.server`. Internal handlers here are package-private.
 - `connect-java-grpc-bridge` - Adapter from gRPC-Java services to the Connect server handler SPI in `io.suboptimal.connectjava.grpcbridge`.
 - `connect-java-bom` - Public dependency management for the module family and compatible runtime dependencies.
+- `connect-java-conformance` - Development-only Java server and Docker harness for the official conformance suite; built in the reactor, excluded from releases. The suite runs only when Docker is invoked explicitly.
 
 Module dependencies flow `grpc-bridge -> server-spi`, `codec-protobuf -> codec`, `core -> api`, and `server -> api + core + codec + compression + server-spi`. The API module must not depend on Netty.
 

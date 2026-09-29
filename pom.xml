@@ -43,6 +43,7 @@
         <module>connect-java-codec-protobuf</module>
         <module>connect-java-server</module>
         <module>connect-java-grpc-bridge</module>
+        <module>connect-java-conformance</module>
     </modules>
 
     <properties>
@@ -55,6 +56,7 @@
         <proto-google-common-protos.version>2.75.0</proto-google-common-protos.version>
         <guava.version>33.6.0-android</guava.version>
         <buff-json.version>0.5.0</buff-json.version>
+        <netty-multiprotocol.version>0.1.0</netty-multiprotocol.version>
         <fastjson2.version>2.0.61</fastjson2.version>
         <slf4j.version>2.0.18</slf4j.version>
         <jspecify.version>1.0.0</jspecify.version>
@@ -64,10 +66,11 @@
         <assertj.version>3.27.7</assertj.version>
 
         <maven-compiler-plugin.version>3.15.0</maven-compiler-plugin.version>
+        <maven-assembly-plugin.version>3.8.0</maven-assembly-plugin.version>
         <maven-surefire-plugin.version>3.2.5</maven-surefire-plugin.version>
         <protobuf-maven-plugin.version>3.1.2</protobuf-maven-plugin.version>
 
-        <central-publishing-maven-plugin.version>0.7.0</central-publishing-maven-plugin.version>
+        <central-publishing-maven-plugin.version>0.11.0</central-publishing-maven-plugin.version>
         <flatten-maven-plugin.version>1.6.0</flatten-maven-plugin.version>
         <maven-gpg-plugin.version>3.2.7</maven-gpg-plugin.version>
         <maven-javadoc-plugin.version>3.11.2</maven-javadoc-plugin.version>
@@ -166,6 +169,11 @@
                 <version>${buff-json.version}</version>
             </dependency>
             <dependency>
+                <groupId>io.github.suboptimal-solutions</groupId>
+                <artifactId>netty-multiprotocol</artifactId>
+                <version>${netty-multiprotocol.version}</version>
+            </dependency>
+            <dependency>
                 <groupId>com.alibaba.fastjson2</groupId>
                 <artifactId>fastjson2</artifactId>
                 <version>${fastjson2.version}</version>
@@ -205,6 +213,11 @@
                             <arg>-Xlint:all,-processing</arg>
                         </compilerArgs>
                     </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-assembly-plugin</artifactId>
+                    <version>${maven-assembly-plugin.version}</version>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
@@ -311,6 +324,7 @@
                         <configuration>
                             <publishingServerId>central</publishingServerId>
                             <autoPublish>true</autoPublish>
+                            <waitUntil>published</waitUntil>
                         </configuration>
                     </plugin>
                 </plugins>

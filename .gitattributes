@@ -1,0 +1,7 @@
+* text=auto
+
+*.[cC][mM][dD] text eol=crlf
+*.[bB][aA][tT] text eol=crlf
+*.[iI][cC][sS] text eol=crlf
+
+*.sh text eol=lf

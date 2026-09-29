@@ -20,6 +20,22 @@ your service code.
 > [ChatGPT Codex](https://openai.com/codex/)). The protocol surface is
 > conformance-verified, but the project is pre-1.0 — APIs may evolve.
 
+## Why another Connect implementation
+
+The intended differentiator is **integration flexibility**:
+
+- **Pipeline-native.** The protocol is implemented as Netty `ChannelHandler`s. No
+  hidden server, no embedded Jetty, no Servlet container — the handlers slot into
+  any pipeline that already carries `HttpServerCodec` (HTTP/1.1) or an HTTP/2
+  stream channel.
+- **No opinion on the service abstraction.** The "terminal" handler at the end of
+  the chain is one you supply via a `ConnectServerCallHandlerFactory`. Wire it to
+  generated proto stubs, hand-rolled handlers, a Reactor pipeline, or anything
+  else that consumes `ConnectCallExchange` + `ConnectPayload` and writes
+  `ConnectPayload`/`ConnectError`/`ConnectEndOfStream` back.
+- **Vanilla Netty.** Works with `ServerBootstrap`, with Reactor Netty, and with
+  any framework that exposes the underlying Netty pipeline.
+
 ## Requirements
 
 - **Java 21** or newer. The library uses sealed interfaces and pattern matching
@@ -32,6 +48,45 @@ your service code.
   do not need a Protobuf dependency.
 - **gRPC-Java 1.83+** *(optional)* — only required when adapting generated gRPC
   service implementations through `connect-java-grpc-bridge`.
+
+## Protocol coverage
+
+- All four Connect method kinds: **unary** (POST and GET-idempotent), **client
+  streaming**, **server streaming**, **bidirectional streaming**.
+- Conformance-verified against the official
+  [connectrpc/conformance](https://github.com/connectrpc/conformance) v1.0.5
+  suite — **1438/1438 tests passing**. The
+  [Docker harness](connect-java-conformance/README.md) reproduces this result
+  locally.
+- Transports:
+  - **HTTP/1.1** — unary, client streaming, server streaming.
+  - **HTTP/2** — all four method kinds (bidi requires HTTP/2 by spec).
+  - **HTTP/3** — planned; the 4.2 Netty baseline is chosen specifically so the
+    incubator HTTP/3 codec can be added without a major version bump.
+- HTTP/1.1 **keep-alive** support — the cornerstone of low-latency unary RPC
+  over a connection pool. Routed handlers are per-request; persistent handlers
+  installed upstream survive across requests.
+- Full **header and trailer passthrough**, including binary `-bin` metadata
+  encoded per the Connect/gRPC convention.
+- Optional **CORS** with Connect-aware defaults (allowed methods, headers, and
+  preflight max-age) and exact-origin or wildcard policies.
+- Message **compression** with a pluggable registry; identity and gzip
+  out of the box.
+- Per-method **timeout** enforcement (`Connect-Timeout-Ms`) and Connect-native
+  error responses with full error-code coverage.
+
+## Table of contents
+
+- [Modules](#modules)
+- [Quickstart: plain HTTP/1.1 Netty server](#quickstart-plain-http11-netty-server)
+- [gRPC-Java bridge](#grpc-java-bridge)
+- [Pipeline shape](#pipeline-shape)
+- [Domain model](#domain-model)
+- [Handler API](#handler-api)
+- [Extension points](#extension-points)
+- [Multi-protocol server example](#multi-protocol-server-example)
+- [Recommended companions](#recommended-companions)
+- [License](#license)
 
 ## Modules
 
@@ -46,6 +101,7 @@ your service code.
 | `connect-java-codec-protobuf` | Binary Protobuf and standard Protobuf JSON codecs. |
 | `connect-java-server` | Netty HTTP/1.1 and HTTP/2 server protocol implementation. |
 | `connect-java-grpc-bridge` | Adapts gRPC-Java `BindableService` implementations to the Connect server pipeline. |
+| `connect-java-conformance` | Development-only Docker harness for the official server conformance suite; built in the reactor but not published. |
 
 Import the BOM, then select the implementation modules needed by the application:
 
@@ -71,72 +127,8 @@ Import the BOM, then select the implementation modules needed by the application
     <groupId>io.github.suboptimal-solutions</groupId>
     <artifactId>connect-java-codec-protobuf</artifactId>
   </dependency>
-  <!-- Add when serving existing gRPC-Java service implementations. -->
-  <dependency>
-    <groupId>io.github.suboptimal-solutions</groupId>
-    <artifactId>connect-java-grpc-bridge</artifactId>
-  </dependency>
 </dependencies>
 ```
-
-The root `connect-java` artifact is the Maven parent and reactor aggregator; it
-is no longer the runtime JAR.
-
-## Table of contents
-
-- [Modules](#modules)
-- [Why another Connect implementation](#why-another-connect-implementation)
-- [Protocol coverage](#protocol-coverage)
-- [Quickstart: plain HTTP/1.1 Netty server](#quickstart-plain-http11-netty-server)
-- [gRPC-Java bridge](#grpc-java-bridge)
-- [Pipeline shape](#pipeline-shape)
-- [Domain model](#domain-model)
-- [Handler API](#handler-api)
-- [Extension points](#extension-points)
-- [Multi-protocol server example](#multi-protocol-server-example)
-- [Recommended companions](#recommended-companions)
-- [License](#license)
-
-## Why another Connect implementation
-
-The intended differentiator is **integration flexibility**:
-
-- **Pipeline-native.** The protocol is implemented as Netty `ChannelHandler`s. No
-  hidden server, no embedded Jetty, no Servlet container — the handlers slot into
-  any pipeline that already carries `HttpServerCodec` (HTTP/1.1) or an HTTP/2
-  stream channel.
-- **No opinion on the service abstraction.** The "terminal" handler at the end of
-  the chain is one you supply via a `ConnectServerCallHandlerFactory`. Wire it to
-  generated proto stubs, hand-rolled handlers, a Reactor pipeline, or anything
-  else that consumes `ConnectCallExchange` + `ConnectPayload` and writes
-  `ConnectPayload`/`ConnectError`/`ConnectEndOfStream` back.
-- **Vanilla Netty.** Works with `ServerBootstrap`, with Reactor Netty, and with
-  any framework that exposes the underlying Netty pipeline.
-
-## Protocol coverage
-
-- All four Connect method kinds: **unary** (POST and GET-idempotent), **client
-  streaming**, **server streaming**, **bidirectional streaming**.
-- Conformance-verified against the official
-  [connectrpc/conformance](https://github.com/connectrpc/conformance) suite —
-  **1438/1438 tests passing**. A ready-to-run Docker image for reproducing
-  conformance locally is on the near-term roadmap.
-- Transports:
-  - **HTTP/1.1** — unary, client streaming, server streaming.
-  - **HTTP/2** — all four method kinds (bidi requires HTTP/2 by spec).
-  - **HTTP/3** — planned; the 4.2 Netty baseline is chosen specifically so the
-    incubator HTTP/3 codec can be added without a major version bump.
-- HTTP/1.1 **keep-alive** support — the cornerstone of low-latency unary RPC
-  over a connection pool. Routed handlers are per-request; persistent handlers
-  installed upstream survive across requests.
-- Full **header and trailer passthrough**, including binary `-bin` metadata
-  encoded per the Connect/gRPC convention.
-- Optional **CORS** with Connect-aware defaults (allowed methods, headers, and
-  preflight max-age) and exact-origin or wildcard policies.
-- Message **compression** with a pluggable registry; identity and gzip
-  out of the box.
-- Per-method **timeout** enforcement (`Connect-Timeout-Ms`) and Connect-native
-  error responses with full error-code coverage.
 
 ## Quickstart: plain HTTP/1.1 Netty server
 
@@ -203,30 +195,10 @@ the corresponding response messages — see that section for the exact contract.
 
 ## gRPC-Java bridge
 
-`connect-java-grpc-bridge` lets an existing generated `*ImplBase` service handle
-Connect requests without adding Connect-specific code to the service:
-
-```java
-import io.suboptimal.connectjava.grpcbridge.ConnectGrpcBridge;
-
-ConnectGrpcBridge bridge = ConnectGrpcBridge.of(new GreeterService());
-
-ConnectProtocolConfig config = ConnectProtocolConfig.builder(
-    bridge.serviceDefinitions(),
-    bridge,
-    new ConnectProtocolParameters(
-        4 * 1024 * 1024,
-        1 * 1024 * 1024,
-        ConnectCorsParameters.disabled()),
-    ConnectProtobufCodecs.defaults())
-    .build();
-```
-
-By default, service and interceptor callbacks run on virtual threads and may
-block without stalling the Netty event loop. Applications can supply their own
-executor with `withServiceExecutor(...)`; `withDirectExecutor()` is reserved for
-strictly non-blocking services. See the [bridge module README](connect-java-grpc-bridge/README.md)
-for configuration details and behavioural constraints.
+`connect-java-grpc-bridge` adapts existing gRPC-Java services to the Connect
+server pipeline, so a generated `*ImplBase` service can handle Connect requests
+without Connect-specific code. See the [bridge module README](connect-java-grpc-bridge/README.md)
+for dependencies, configuration examples, and behavioural constraints.
 
 ## Pipeline shape
 
