@@ -154,8 +154,3 @@ ConnectGrpcBridge bridge = ConnectGrpcBridge.builder()
   codec and compression registries control wire encoding. `getAuthority()`
   retains gRPC-Java's default `null`; the inbound `host` header is available
   through request metadata.
-
-Source-level research on the gRPC-Java contracts and the bridge's design is
-kept in the companion `connect-java-specs` project under
-`grpc-java/grpc-specifics.md`. Its source citations were established against
-gRPC-Java 1.76.0 and should be rechecked for version-sensitive details.
