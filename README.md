@@ -1,5 +1,6 @@
 # connect-java
 
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.suboptimal-solutions/connect-java-server.svg)](https://central.sonatype.com/artifact/io.github.suboptimal-solutions/connect-java-server)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 
 A standalone implementation of the [Connect RPC](https://connectrpc.com/docs/protocol) protocol
